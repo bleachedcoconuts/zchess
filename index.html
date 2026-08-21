@@ -108,6 +108,11 @@
   .clocks-list .clockRow.active { border-color: var(--sky); box-shadow: 0 0 0 1px var(--sky) inset; }
   .clocks-list .clockRow.out { opacity: 0.35; }
   .clocks-list .clockRow.low .time { color: var(--salmon); }
+  .clocks-list .clockRow.disc { opacity: 0.6; }
+  .discTag {
+    color: var(--salmon); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.3px; margin-left: 6px; text-transform: uppercase;
+  }
   .clocks-list .who { display: flex; align-items: center; gap: 8px; }
   .clocks-list .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 5px currentColor; }
   .clocks-list .right { display: flex; align-items: center; gap: 8px; }
@@ -261,6 +266,7 @@
   .seatRow .name { color: #e8ecf4; font-weight: 600; }
   .seatRow.empty .name { color: #5a6580; font-style: italic; font-weight: 400; }
   .seatRow.me { border-color: var(--sky); }
+  .seatRow.disc { opacity: 0.7; }
   .youAreLabel { text-align: center; font-size: 12.5px; color: #b8c2d8; margin-bottom: 12px; }
   .waitHint { text-align: center; font-size: 12px; color: #5a6580; margin-top: 10px; }
   .gameEndTitle { font-size: 22px; font-weight: 700; color: #e8ecf4; text-align: center; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -345,6 +351,9 @@
           <span>Total clock (min)</span>
           <input type="number" id="totalClockInput" min="1" max="180" step="1" value="10">
         </div>
+        <div class="toggles">
+          <label><input type="checkbox" id="zombieCheck"> Zombie chess (captured king's pieces defect to capturer)</label>
+        </div>
       </div>
       <div id="setupSummary" class="setupSummary hidden"></div>
     </div>
@@ -371,6 +380,9 @@
       </div>
       <div class="numRow"><span>Move timer (sec)</span><input type="number" id="lobbyMoveTimerInput" min="5" max="600" step="5" value="30"></div>
       <div class="numRow"><span>Total clock (min)</span><input type="number" id="lobbyTotalClockInput" min="1" max="180" step="1" value="10"></div>
+      <div class="toggles" style="margin-bottom:14px;">
+        <label><input type="checkbox" id="lobbyZombieCheck"> Zombie chess (captured king's pieces defect to capturer)</label>
+      </div>
       <div class="numRow"><span>Your name</span><input type="text" id="lobbyNameInputCreate" maxlength="16" placeholder="Player"></div>
       <button id="lobbyCreateBtn" class="lobbyPrimaryBtn" type="button">Create Room</button>
     </div>
@@ -825,6 +837,7 @@ let activePlayers = Array.from({length:n}, (_,i)=>i);
 let turn = 0;
 let selected = null, legalMoves = [], gameOver = false, winner = null, message = '', lastMoveHighlight = null;
 let gameStarted = false, paused = false, pauseStartTs = null;
+let zombieMode = false; // Zombie chess: captured king's surviving pieces defect to the capturer
 
 // ── Chess clocks: configurable per-move limit, overage eats into a bank ────
 let MOVE_LIMIT_MS = 30 * 1000;
@@ -950,8 +963,17 @@ function executeMove(fromKey, toCell, meta) {
 
   if (eliminated !== null) {
     activePlayers = activePlayers.filter(p => p !== eliminated);
-    for (const k in board) if (board[k].player === eliminated) delete board[k];
-    message = `Player ${eliminated+1} eliminated!`;
+    if (zombieMode) {
+      // Zombie chess: the eliminated player's surviving pieces defect to
+      // whoever captured their king, instead of vanishing from the board.
+      for (const k in board) {
+        if (board[k].player === eliminated) board[k] = {...board[k], player: mover};
+      }
+      message = `Player ${eliminated+1} eliminated — their pieces defect to Player ${mover+1}!`;
+    } else {
+      for (const k in board) if (board[k].player === eliminated) delete board[k];
+      message = `Player ${eliminated+1} eliminated!`;
+    }
   } else {
     message = '';
   }
@@ -985,7 +1007,7 @@ function previewSetup(nn) {
 }
 
 function setupSummaryText() {
-  return `<b>${n}</b> players · <b>${Math.round(MOVE_LIMIT_MS/1000)}s</b>/move · <b>${Math.round(MAIN_CLOCK_MS/60000)}:00</b> clock`;
+  return `<b>${n}</b> players · <b>${Math.round(MOVE_LIMIT_MS/1000)}s</b>/move · <b>${Math.round(MAIN_CLOCK_MS/60000)}:00</b> clock${zombieMode ? ' · <b>Zombie chess</b>' : ''}`;
 }
 
 function startNewGameFromSetup() {
@@ -994,6 +1016,7 @@ function startNewGameFromSetup() {
   const clockMin = Math.max(1, parseInt(totalClockInput.value, 10) || 10);
   MOVE_LIMIT_MS = moveSec * 1000;
   MAIN_CLOCK_MS = clockMin * 60 * 1000;
+  zombieMode = !!document.getElementById('zombieCheck').checked;
   gameStarted = true;
   newGame(nn);
   document.getElementById('newGameBtn').classList.add('hidden');
@@ -1031,7 +1054,7 @@ function abortGame() {
 
 function togglePause() {
   if (!gameStarted || gameOver) return;
-  if (roomCode && (isSpectator || mySeat === null || !activePlayers.includes(mySeat))) return;
+  if (roomCode && !isHost) return;
   const btn = document.getElementById('pauseBtn');
   if (!paused) {
     paused = true;
@@ -1064,6 +1087,7 @@ let isHost = false;
 let roomStatus = null;      // 'lobby' | 'playing'
 let lastKnownStatus = null;
 let gameEndShownFor = null; // guards against re-showing the overlay repeatedly
+let roomUnsub = null;       // unsubscribe fn for the active room listener
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 function makeRoomCode() {
@@ -1129,19 +1153,32 @@ function checkShowGameEndOverlay() {
   }
 }
 
+// A seat's player counts as connected unless explicitly marked false —
+// avoids a false "disconnected" flash before the initial connected:true
+// write lands.
+function seatIsConnected(uid) {
+  if (!uid) return true;
+  const p = roomPlayers[uid];
+  if (!p) return false;
+  return p.connected !== false;
+}
+
 function renderSeatList() {
   const nn = (roomConfig && roomConfig.n) || n;
   const listEl = document.getElementById('seatList');
   if (!listEl) return;
+  const codeEl = document.getElementById('roomCodeText');
+  if (codeEl) codeEl.textContent = roomCode || '-----';
   let html = '';
   for (let s = 0; s < nn; s++) {
     const uid = roomSeats[s];
     const p = uid ? roomPlayers[uid] : null;
     const mine = uid && uid === myUid;
+    const connected = seatIsConnected(uid);
     const color = playerColor(s, nn);
-    html += `<div class="seatRow ${p ? '' : 'empty'} ${mine ? 'me' : ''}">
+    html += `<div class="seatRow ${p ? '' : 'empty'} ${mine ? 'me' : ''} ${p && !connected ? 'disc' : ''}">
       <span class="who"><span class="dot" style="background:${color}"></span>Player ${s + 1}</span>
-      <span class="name">${p ? (p.name || 'Player') + (mine ? ' (you)' : '') : 'Empty seat'}</span>
+      <span class="name">${p ? (p.name || 'Player') + (mine ? ' (you)' : '') : 'Empty seat'}${p && !connected ? '<span class="discTag">Disconnected</span>' : ''}</span>
     </div>`;
   }
   listEl.innerHTML = html;
@@ -1179,6 +1216,7 @@ function renderRoomUI(room) {
   const endOverlay = document.getElementById('gameEndOverlay');
   const resignBtn = document.getElementById('resignBtn');
   const abortBtn = document.getElementById('abortBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
 
   lobbyOverlay.classList.add('hidden');
   renderRoomBar();
@@ -1196,6 +1234,7 @@ function renderRoomUI(room) {
       n = roomConfig.n;
       MOVE_LIMIT_MS = roomConfig.moveLimitMs;
       MAIN_CLOCK_MS = roomConfig.mainClockMs;
+      zombieMode = !!roomConfig.zombie;
       gameStarted = true;
       document.getElementById('gameButtonsRow').classList.remove('hidden');
       const summaryEl = document.getElementById('setupSummary');
@@ -1204,6 +1243,7 @@ function renderRoomUI(room) {
     }
     gameStarted = true;
     abortBtn.classList.toggle('hidden', !isHost);
+    pauseBtn.classList.toggle('hidden', !isHost);
     const canResign = !isSpectator && mySeat !== null && !gameOver && activePlayers.includes(mySeat);
     resignBtn.classList.toggle('hidden', !canResign);
   }
@@ -1222,8 +1262,28 @@ function computeMyRole(room) {
   isSpectator = mySeat === null;
 }
 
+// If every seated player is disconnected, the room is abandoned — delete it
+// from Firebase. Any client still watching this room's listener (including
+// the last player, whose own onValue fires right up until they truly leave)
+// will catch this and perform the cleanup; remove() is idempotent so it's
+// safe if more than one client races to call it.
+function maybeCleanupAbandonedRoom(code, room) {
+  const seats = room.seats || {};
+  const players = room.players || {};
+  const seatUids = Object.values(seats);
+  if (!seatUids.length) return;
+  const allGone = seatUids.every(uid => {
+    const p = players[uid];
+    return !p || p.connected === false;
+  });
+  if (allGone) {
+    remove(ref(db, `rooms/${code}`)).catch(() => {});
+  }
+}
+
 function listenRoom(code) {
-  onValue(ref(db, `rooms/${code}`), (snap) => {
+  if (roomUnsub) { roomUnsub(); roomUnsub = null; }
+  roomUnsub = onValue(ref(db, `rooms/${code}`), (snap) => {
     const room = snap.val();
     if (!room) {
       // Room no longer exists — send everyone back to the entry lobby.
@@ -1236,6 +1296,7 @@ function listenRoom(code) {
     if (room.state) applyRemoteState(room.state);
     roomStatus = room.status;
     renderRoomUI(room);
+    maybeCleanupAbandonedRoom(code, room);
   });
 }
 
@@ -1267,9 +1328,10 @@ async function createRoom() {
     const nn = parseInt(document.getElementById('lobbyASlider').value, 10);
     const moveSec = Math.max(1, parseInt(document.getElementById('lobbyMoveTimerInput').value, 10) || 30);
     const clockMin = Math.max(1, parseInt(document.getElementById('lobbyTotalClockInput').value, 10) || 10);
+    const zombie = !!document.getElementById('lobbyZombieCheck').checked;
     const name = (document.getElementById('lobbyNameInputCreate').value || 'Player 1').trim().slice(0, 16) || 'Player 1';
     const code = makeRoomCode();
-    const config = { n: nn, moveLimitMs: moveSec * 1000, mainClockMs: clockMin * 60 * 1000 };
+    const config = { n: nn, moveLimitMs: moveSec * 1000, mainClockMs: clockMin * 60 * 1000, zombie };
     await set(ref(db, `rooms/${code}`), {
       hostUid: myUid,
       status: 'lobby',
@@ -1342,7 +1404,20 @@ async function startGameAsHost() {
   await update(ref(db, `rooms/${roomCode}`), { status: 'playing' });
 }
 
-function leaveRoomLocal() {
+async function leaveRoomLocal() {
+  const leavingCode = roomCode;
+  if (roomUnsub) { roomUnsub(); roomUnsub = null; }
+  if (leavingCode && myUid) {
+    // Mark ourselves disconnected right away (don't wait on the browser's
+    // onDisconnect hook), so other clients see it immediately and can
+    // clean up the room if we were the last one there.
+    try { await update(ref(db, `rooms/${leavingCode}/players/${myUid}`), { connected: false }); } catch (e) {}
+    try {
+      const snap = await get(ref(db, `rooms/${leavingCode}`));
+      const room = snap.val();
+      if (room) maybeCleanupAbandonedRoom(leavingCode, room);
+    } catch (e) {}
+  }
   roomCode = null; roomConfig = null; mySeat = null; isSpectator = false; isHost = false;
   gameStarted = false; roomStatus = null; lastKnownStatus = null;
   document.getElementById('roomWaitOverlay').classList.add('hidden');
@@ -1428,8 +1503,11 @@ function updateStatusPanel() {
     statusBox.innerHTML =
       `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${playerColor(turn,n)};margin-right:6px;vertical-align:middle"></span>Player ${turn+1}'s turn — <b>Paused</b>`;
   } else {
+    const turnUid = roomCode ? roomSeats[turn] : null;
+    const turnDisc = roomCode && turnUid && !seatIsConnected(turnUid);
     statusBox.innerHTML =
       `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${playerColor(turn,n)};margin-right:6px;vertical-align:middle"></span>Player ${turn+1}'s turn` +
+      (turnDisc ? ` <span class="discTag">Disconnected</span>` : '') +
       (message ? ` — ${message}` : '');
   }
   elimBox.textContent = activePlayers.length < n
@@ -1437,7 +1515,7 @@ function updateStatusPanel() {
     : '';
 
   const headerInfo = document.getElementById('clocksHeaderInfo');
-  if (headerInfo) headerInfo.textContent = `— ${Math.round(MOVE_LIMIT_MS/1000)}s/move, ${Math.round(MAIN_CLOCK_MS/60000)}:00 total`;
+  if (headerInfo) headerInfo.textContent = `— ${Math.round(MOVE_LIMIT_MS/1000)}s/move, ${Math.round(MAIN_CLOCK_MS/60000)}:00 total${zombieMode ? ', zombie chess' : ''}`;
 
   updateClockPanel();
 }
@@ -1526,10 +1604,11 @@ function updateClockPanel() {
       const active = !out && p === turn && !gameOver && gameStarted;
       const ms = liveClock(p);
       const low = !out && ms <= 30000;
-      const cls = ['clockRow', out ? 'out' : '', active ? 'active' : '', low ? 'low' : ''].filter(Boolean).join(' ');
+      const disc = roomCode && !out && !seatIsConnected(roomSeats[p]);
+      const cls = ['clockRow', out ? 'out' : '', active ? 'active' : '', low ? 'low' : '', disc ? 'disc' : ''].filter(Boolean).join(' ');
       const pc = playerColor(p, n);
       const style = active ? `border-color:${pc}; box-shadow:0 0 0 1px ${pc} inset;` : '';
-      return `<div class="${cls}" style="${style}"><span class="who"><span class="dot" style="background:${pc};color:${pc}"></span>Player ${p+1}</span><span class="right">${miniRingSvg(p, active, out)}<span class="time" style="color:${low ? '' : pc}">${formatClock(ms)}</span></span></div>`;
+      return `<div class="${cls}" style="${style}"><span class="who"><span class="dot" style="background:${pc};color:${pc}"></span>Player ${p+1}${disc ? '<span class="discTag">Off</span>' : ''}</span><span class="right">${miniRingSvg(p, active, out)}<span class="time" style="color:${low ? '' : pc}">${formatClock(ms)}</span></span></div>`;
     }).join('');
   }
   updateCircleTimer();
