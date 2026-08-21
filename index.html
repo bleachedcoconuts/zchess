@@ -1089,6 +1089,33 @@ let lastKnownStatus = null;
 let gameEndShownFor = null; // guards against re-showing the overlay repeatedly
 let roomUnsub = null;       // unsubscribe fn for the active room listener
 
+// ── Abandoned-room cleanup ────────────────────────────────────────────────
+// The listener-based cleanup (maybeCleanupAbandonedRoom, below) only fires
+// for clients actively watching that exact room, so it does nothing if the
+// last person leaves by closing their tab rather than clicking Leave. As a
+// backstop, any client — creating a room, joining one, or just opening the
+// app — sweeps the room list and applies that same "all seated players
+// disconnected" check to every room. This reuses the `connected` flag that
+// Firebase's onDisconnect() already writes server-side the moment a socket
+// drops, whether or not anyone was watching when it happened — so no
+// separate heartbeat/timestamp mechanism is needed.
+const SWEEP_THROTTLE_MS = 5 * 60 * 1000; // don't re-fetch the room list on every page load — nothing changes that fast
+
+async function sweepAbandonedRooms() {
+  try {
+    // Client-side throttle: skip the fetch entirely if this browser already
+    // swept recently.
+    const last = parseInt(localStorage.getItem('limaconChessLastSweep') || '0', 10);
+    if (Date.now() - last < SWEEP_THROTTLE_MS) return;
+    localStorage.setItem('limaconChessLastSweep', String(Date.now()));
+
+    const snap = await get(ref(db, 'rooms'));
+    const rooms = snap.val();
+    if (!rooms) return;
+    for (const code in rooms) maybeCleanupAbandonedRoom(code, rooms[code]);
+  } catch (e) {}
+}
+
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
 function makeRoomCode() {
   let s = '';
@@ -1325,6 +1352,7 @@ async function createRoom() {
   clearLobbyError();
   try {
     await ensureSignedIn();
+    sweepAbandonedRooms(); // opportunistic cleanup, don't block on it
     const nn = parseInt(document.getElementById('lobbyASlider').value, 10);
     const moveSec = Math.max(1, parseInt(document.getElementById('lobbyMoveTimerInput').value, 10) || 30);
     const clockMin = Math.max(1, parseInt(document.getElementById('lobbyTotalClockInput').value, 10) || 10);
@@ -1350,6 +1378,7 @@ async function joinRoom() {
   clearLobbyError();
   try {
     await ensureSignedIn();
+    sweepAbandonedRooms(); // opportunistic cleanup, don't block on it
     const code = (document.getElementById('lobbyCodeInput').value || '').trim().toUpperCase();
     const name = (document.getElementById('lobbyNameInputJoin').value || 'Player').trim().slice(0, 16) || 'Player';
     if (!code) { showLobbyError('Enter a room code.'); return; }
@@ -2095,6 +2124,13 @@ resizeCanvas();
 
 updateStatusPanel();
 setInterval(tickClock, 250);
+
+// Best-effort background sweep on page load, so an abandoned room can get
+// cleaned up by anyone opening the app — not just someone who happens to
+// visit that exact room code.
+(async () => {
+  try { await ensureSignedIn(); await sweepAbandonedRooms(); } catch (e) {}
+})();
 </script>
 </body>
 </html>
