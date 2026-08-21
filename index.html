@@ -109,6 +109,13 @@
   .clocks-list .clockRow.out { opacity: 0.35; }
   .clocks-list .clockRow.low .time { color: var(--salmon); }
   .clocks-list .clockRow.disc { opacity: 0.6; }
+  .kickBtn {
+    background: transparent; border: 1px solid #3a2530; color: #a56a75;
+    border-radius: 4px; padding: 3px 7px; font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.3px; cursor: pointer; flex-shrink: 0; text-transform: uppercase;
+  }
+  .kickBtn:hover { border-color: var(--salmon); color: var(--salmon); background: #201118; }
+  .clockRow .right { display: flex; align-items: center; gap: 8px; }
   .discTag {
     color: var(--salmon); font-size: 10px; font-weight: 700;
     letter-spacing: 0.3px; margin-left: 6px; text-transform: uppercase;
@@ -271,7 +278,8 @@
   }
   .seatRow .who { display: flex; align-items: center; gap: 8px; color: #b8c2d8; }
   .seatRow .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .seatRow .name { color: #e8ecf4; font-weight: 600; }
+  .seatRow .name { color: #e8ecf4; font-weight: 600; flex: 1 1 auto; min-width: 0; }
+  .seatRow .who { flex-shrink: 0; }
   .seatRow.empty .name { color: #5a6580; font-style: italic; font-weight: 400; }
   .seatRow.me { border-color: var(--sky); }
   .seatRow.disc { opacity: 0.7; }
@@ -1258,6 +1266,8 @@ function seatIsConnected(uid) {
   return p.connected !== false;
 }
 
+const MIN_PLAYERS_TO_START = 2;
+
 function renderSeatList() {
   const nn = (roomConfig && roomConfig.n) || n;
   const listEl = document.getElementById('seatList');
@@ -1275,18 +1285,29 @@ function renderSeatList() {
     // Empty seats are clickable to sit down; your own seat is clickable to
     // stand back up; seats held by someone else are inert.
     const clickable = canPick && (!p || mine);
+    // Host can kick anyone seated but themselves, any time the room is in
+    // the lobby (kicking mid-game is handled separately, in the clocks panel).
+    const canKick = canPick && isHost && p && !mine;
     html += `<div class="seatRow ${p ? 'taken' : 'empty'} ${mine ? 'me' : ''} ${p && !connected ? 'disc' : ''} ${clickable ? 'clickable' : ''}" data-seat="${s}">
       <span class="who"><span class="dot" style="background:${color}"></span>Player ${s + 1}</span>
       <span class="name">${p ? (p.name || 'Player') + (mine ? ' (you — tap to stand)' : '') : (canPick ? 'Empty — tap to sit' : 'Empty seat')}${p && !connected ? '<span class="discTag">Disconnected</span>' : ''}</span>
+      ${canKick ? `<button type="button" class="kickBtn" data-kick-seat="${s}" title="Kick ${(p.name || 'this player').replace(/"/g, '')}">Kick</button>` : ''}
     </div>`;
   }
   listEl.innerHTML = html;
   if (canPick) {
     listEl.querySelectorAll('.seatRow.clickable').forEach(row => {
-      row.addEventListener('click', () => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.kickBtn')) return; // don't sit/stand when hitting the kick button
         const s = parseInt(row.dataset.seat, 10);
         if (roomSeats[s] && roomSeats[s] === myUid) leaveSeat();
         else if (!roomSeats[s]) claimSeat(s);
+      });
+    });
+    listEl.querySelectorAll('.kickBtn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        kickPlayer(parseInt(btn.dataset.kickSeat, 10));
       });
     });
   }
@@ -1301,8 +1322,14 @@ function renderSeatList() {
   const hint = document.getElementById('waitHint');
   if (isHost) {
     startBtn.classList.remove('hidden');
-    startBtn.disabled = seatedCount < nn;
-    hint.textContent = seatedCount < nn ? `Waiting for players (${seatedCount}/${nn})…` : 'All seats full — start whenever you\'re ready.';
+    startBtn.disabled = seatedCount < MIN_PLAYERS_TO_START;
+    if (seatedCount < MIN_PLAYERS_TO_START) {
+      hint.textContent = `Waiting for players (${seatedCount}/${nn}) — need at least ${MIN_PLAYERS_TO_START} to start…`;
+    } else if (seatedCount < nn) {
+      hint.textContent = `${seatedCount}/${nn} seated — you can start now, or wait for more.`;
+    } else {
+      hint.textContent = 'All seats full — start whenever you\'re ready.';
+    }
   } else {
     startBtn.classList.add('hidden');
     hint.textContent = `Waiting for the host to start (${seatedCount}/${nn} seated)…`;
@@ -1327,6 +1354,23 @@ async function leaveSeat() {
   updates[`seats/${mySeat}`] = null;
   updates[`players/${myUid}/seat`] = -1;
   try { await update(ref(db, `rooms/${roomCode}`), updates); } catch (e) {}
+}
+
+// Host-only: remove a seated player from the room entirely (not just their
+// seat), so a kicked player can't simply sit back down. The kicked client
+// detects its own absence from room.players in listenRoom() and gets
+// bounced back to the entry lobby with an explanation.
+async function kickPlayer(s) {
+  if (!roomCode || !isHost || roomStatus !== 'lobby') return;
+  const uid = roomSeats[s];
+  if (!uid || uid === myUid) return;
+  const name = (roomPlayers[uid] && roomPlayers[uid].name) || 'this player';
+  showConfirm(`Kick ${name} from the room?`, async () => {
+    const updates = {};
+    updates[`seats/${s}`] = null;
+    updates[`players/${uid}`] = null;
+    try { await update(ref(db, `rooms/${roomCode}`), updates); } catch (e) {}
+  });
 }
 
 function renderRoomSettings() {
@@ -1382,6 +1426,10 @@ function renderRoomUI(room) {
     document.getElementById('gameButtonsRow').classList.add('hidden');
     renderSeatList();
     renderRoomSettings();
+    // Keep the board (and which seats show pieces/timers) in sync with the
+    // lobby as people sit down or stand up — not just when the player-count
+    // slider changes.
+    draw();
   } else if (room.status === 'playing') {
     lobbyCard.classList.add('hidden');
     statusCard.classList.remove('hidden');
@@ -1445,6 +1493,14 @@ function listenRoom(code) {
       // Room no longer exists — send everyone back to the entry lobby.
       leaveRoomLocal();
       showLobbyError('That room no longer exists.');
+      return;
+    }
+    if (myUid && room.players && !room.players[myUid]) {
+      // The host removed us from room.players entirely — that's a kick
+      // (as opposed to just standing up, which leaves the player entry
+      // in place with seat: -1). Send us back to the entry lobby.
+      leaveRoomLocal();
+      showLobbyError('The host removed you from the room.');
       return;
     }
     roomConfig = room.config || roomConfig;
@@ -1541,10 +1597,19 @@ function enterRoom(code) {
 async function startGameAsHost() {
   if (!roomCode || !isHost) return;
   const nn = roomConfig.n;
+  // Only actually-seated players take part — empty seats are treated as
+  // already eliminated (no pieces, skipped in turn order) rather than
+  // requiring every seat to be filled before the host can start.
+  const seated = Array.from({ length: nn }, (_, i) => i).filter(s => !!roomSeats[s]);
+  if (seated.length < MIN_PLAYERS_TO_START) return;
+  const board = setupBoard(nn);
+  for (const k in board) {
+    if (!seated.includes(board[k].player)) delete board[k];
+  }
   const initState = {
-    board: setupBoard(nn),
-    activePlayers: Array.from({ length: nn }, (_, i) => i),
-    turn: 0,
+    board,
+    activePlayers: seated,
+    turn: seated[0],
     clocks: Array.from({ length: nn }, () => roomConfig.mainClockMs),
     moveStartTs: Date.now(),
     paused: false, pauseStartTs: null,
@@ -1822,6 +1887,31 @@ function updateBoardClocks() {
     prog.setAttribute('stroke-dashoffset', rs.dashoffset);
   }
 }
+// Host-only: remove a still-active player from a live game — pulls them
+// out of the room entirely (so they can't rejoin the seat) and eliminates
+// their seat from play, same as a resignation, so the game doesn't stall
+// waiting on someone who's gone.
+async function kickPlayerInGame(p) {
+  if (!roomCode || !isHost || roomStatus !== 'playing') return;
+  if (!activePlayers.includes(p) || p === mySeat) return;
+  const uid = roomSeats[p];
+  if (!uid) return;
+  const name = playerLabel(p);
+  showConfirm(`Kick ${name} from the game?`, async () => {
+    const updates = {};
+    updates[`seats/${p}`] = null;
+    updates[`players/${uid}`] = null;
+    try { await update(ref(db, `rooms/${roomCode}`), updates); } catch (e) {}
+    eliminatePlayer(p, `${name} was removed by the host.`);
+  });
+}
+if (clocksBoxEl) {
+  clocksBoxEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.kickBtn');
+    if (!btn) return;
+    kickPlayerInGame(parseInt(btn.dataset.kickSeat, 10));
+  });
+}
 function updateClockPanel() {
   if (clocksBoxEl) {
     clocksBoxEl.innerHTML = Array.from({length:n}, (_,p) => {
@@ -1833,7 +1923,8 @@ function updateClockPanel() {
       const cls = ['clockRow', out ? 'out' : '', active ? 'active' : '', low ? 'low' : '', disc ? 'disc' : ''].filter(Boolean).join(' ');
       const pc = playerColor(p, n);
       const style = active ? `border-color:${pc}; box-shadow:0 0 0 1px ${pc} inset;` : '';
-      return `<div class="${cls}" style="${style}"><span class="who"><span class="dot" style="background:${pc};color:${pc}"></span>${playerLabel(p)}${disc ? '<span class="discTag">Off</span>' : ''}</span><span class="right">${miniRingSvg(p, active, out)}<span class="time" style="color:${low ? '' : pc}">${formatClock(ms)}</span></span></div>`;
+      const canKick = isHost && roomCode && !out && p !== mySeat && !!roomSeats[p] && !gameOver;
+      return `<div class="${cls}" style="${style}"><span class="who"><span class="dot" style="background:${pc};color:${pc}"></span>${playerLabel(p)}${disc ? '<span class="discTag">Off</span>' : ''}</span><span class="right">${miniRingSvg(p, active, out)}<span class="time" style="color:${low ? '' : pc}">${formatClock(ms)}</span>${canKick ? `<button type="button" class="kickBtn" data-kick-seat="${p}" title="Kick ${playerLabel(p)}">Kick</button>` : ''}</span></div>`;
     }).join('');
   }
   updateCircleTimer();
