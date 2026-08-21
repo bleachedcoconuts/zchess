@@ -19,7 +19,7 @@
     /* Neutral surface/text tokens — these flip between themes; branded
        accents (sky/teal/salmon/etc.) stay constant across both. */
     --bg-page: #0a0f1c;
-    --bg-canvas: #0c1120;
+    --bg-canvas: #161d33;
     --bg-panel: #101524;
     --bg-panel-alt: #0d1220;
     --bg-input: #0a0e1a;
@@ -1070,6 +1070,16 @@ function getLegalMoves(cell, info, nn, cellExists, brd) {
   return raw.map(m => ({cell: m.cell, capture: !!brd[ck(m.cell)], newDir: m.newDir, double: m.double, castle: m.castle, rookFrom: m.rookFrom, rookTo: m.rookTo}));
 }
 
+// Whether the local client is actually allowed to move this piece right now
+// (its owner's turn, and — in a room — this client is seated as that
+// player). Pieces that fail this can still be selected to preview their
+// moves; they just can't be moved.
+function canControlPiece(info) {
+  if (!info || info.player !== turn) return false;
+  if (roomCode && (isSpectator || mySeat === null || mySeat !== turn)) return false;
+  return true;
+}
+
 // ── Game state ─────────────────────────────────────────────────────────────
 const PIECE_ORDER = ['R','N','B','Q','K','B','N','R'];
 const GLYPH = {K:'♚',Q:'♛',R:'♜',B:'♝',N:'♞',P:'♟'};
@@ -1090,8 +1100,9 @@ function playerColor(p, nn) {
   // e.g. yellow reads much brighter than blue at the same L value), and we
   // pick L per theme so pieces always contrast against the board: light
   // pieces on the dark board, dark pieces on the light pastel board.
-  const light = theme === 'pastel' ? 40 : 78;
-  return `oklch(${light}% 0.16 ${hue})`;
+  const light = theme === 'pastel' ? 52 : 68;
+  const chroma = theme === 'pastel' ? 0.21 : 0.16;
+  return `oklch(${light}% ${chroma} ${hue})`;
 }
 // In a room, prefer the seated player's chosen display name over the
 // generic "Player N" — falls back to "Player N" for local pass-and-play,
@@ -1109,7 +1120,7 @@ let n = parseInt(document.getElementById('aSlider').value, 10);
 let board = setupBoard(n);
 let activePlayers = Array.from({length:n}, (_,i)=>i);
 let turn = 0;
-let selected = null, legalMoves = [], gameOver = false, winner = null, message = '', lastMoveHighlight = null;
+let selected = null, legalMoves = [], selectable = false, gameOver = false, winner = null, message = '', lastMoveHighlight = null;
 let gameStarted = false, paused = false, pauseStartTs = null;
 let pendingPromotion = null; // {toKey} while a promotion choice is awaited
 let zombieMode = false; // Zombie chess: captured king's surviving pieces defect to the capturer
@@ -1160,7 +1171,7 @@ function eliminatePlayer(p, reasonMsg) {
     if (!found) { gameOver = true; winner = null; }
     else { startMoveTimer(); }
   }
-  selected = null; legalMoves = [];
+  selected = null; legalMoves = []; selectable = false;
   draw();
   updateStatusPanel();
   if (roomCode) pushLocalStateToRoom();
@@ -1292,7 +1303,7 @@ function newGame(nn) {
   board = setupBoard(n);
   activePlayers = Array.from({length:n}, (_,i)=>i);
   turn = 0;
-  selected = null; legalMoves = []; gameOver = false; winner = null; message = ''; lastMoveHighlight = null;
+  selected = null; legalMoves = []; selectable = false; gameOver = false; winner = null; message = ''; lastMoveHighlight = null;
   initClocks(n);
   startMoveTimer();
   paused = false; pauseStartTs = null;
@@ -1306,7 +1317,7 @@ function previewSetup(nn) {
   board = setupBoard(n);
   activePlayers = Array.from({length:n}, (_,i)=>i);
   turn = 0;
-  selected = null; legalMoves = []; gameOver = false; winner = null; message = ''; lastMoveHighlight = null;
+  selected = null; legalMoves = []; selectable = false; gameOver = false; winner = null; message = ''; lastMoveHighlight = null;
   initClocks(n);
   zoomToFit();
 }
@@ -1453,7 +1464,21 @@ function applyRemoteState(state) {
   winner = state.winner != null ? state.winner : null;
   message = state.message || '';
   lastMoveHighlight = state.lastMoveHighlight || null;
-  if (turn !== mySeat || gameOver) { selected = null; legalMoves = []; }
+  if (gameOver) {
+    selected = null; legalMoves = []; selectable = false;
+  } else if (selected) {
+    // A piece can still be previewed (in a different color) when it's not
+    // this client's turn to move it — only clear the preview if that piece
+    // is actually gone now, otherwise just refresh its moves/selectability
+    // against the freshly synced board.
+    const stillThere = board[ck(selected)];
+    if (!stillThere) {
+      selected = null; legalMoves = []; selectable = false;
+    } else {
+      legalMoves = getLegalMoves(selected, stillThere, n, cellExistsGlobal, board);
+      selectable = canControlPiece(stillThere);
+    }
+  }
 
   const pauseBtn = document.getElementById('pauseBtn');
   if (pauseBtn) {
@@ -2422,9 +2447,15 @@ function draw() {
   };
 
   // ── Last move + selection + legal-move highlights ──────────────────────
+  // "preview*" is used when the selected piece can't actually be moved by
+  // this client right now (opponent's piece, or your own piece out of
+  // turn) — a cooler, flatter tone than the actionable move/capture/select
+  // colors so it reads as "informational" rather than "you can do this."
   const HL = theme === 'pastel'
-    ? { last: 'rgba(90,70,120,0.14)', capture: 'rgba(214,60,90,0.5)', move: 'rgba(40,150,90,0.4)', selected: 'rgba(224,150,30,0.5)' }
-    : { last: 'rgba(255,255,255,0.12)', capture: 'rgba(255,60,60,0.6)', move: 'rgba(0,255,80,0.5)', selected: 'rgba(255,210,60,0.55)' };
+    ? { last: 'rgba(90,70,120,0.14)', capture: 'rgba(214,60,90,0.5)', move: 'rgba(40,150,90,0.4)', selected: 'rgba(224,150,30,0.5)',
+        previewMove: 'rgba(90,110,140,0.35)', previewSelected: 'rgba(90,110,140,0.55)' }
+    : { last: 'rgba(255,255,255,0.12)', capture: 'rgba(255,60,60,0.6)', move: 'rgba(0,255,80,0.5)', selected: 'rgba(255,210,60,0.55)',
+        previewMove: 'rgba(140,160,190,0.32)', previewSelected: 'rgba(140,160,190,0.5)' };
   if (lastMoveHighlight) {
     ctx.fillStyle = HL.last;
     const fg = cellGeoOfGlobal(keyToCell(lastMoveHighlight.from));
@@ -2436,12 +2467,12 @@ function draw() {
     for (const m of legalMoves) {
       const mg = cellGeoOfGlobal(m.cell);
       if (!mg) continue;
-      ctx.fillStyle = m.capture ? HL.capture : HL.move;
+      ctx.fillStyle = selectable ? (m.capture ? HL.capture : HL.move) : HL.previewMove;
       drawQuad(mg); ctx.fill();
     }
     const sg = cellGeoOfGlobal(selected);
     if (sg) {
-      ctx.fillStyle = HL.selected;
+      ctx.fillStyle = selectable ? HL.selected : HL.previewSelected;
       drawQuad(sg); ctx.fill();
     }
   }
@@ -2478,32 +2509,41 @@ function draw() {
 
 function handleCellClick(cell) {
   if (!gameStarted || gameOver || paused || pendingPromotion) return;
-  if (roomCode && (isSpectator || mySeat === null || mySeat !== turn)) return;
   const key = ck(cell);
   const occ = board[key];
 
   if (selected) {
-    if (ck(selected) === key) { selected = null; legalMoves = []; draw(); return; }
-    const mv = legalMoves.find(m => ck(m.cell) === key);
-    if (mv) {
-      executeMove(ck(selected), mv.cell, mv);
-      selected = null; legalMoves = [];
-      draw();
-      return;
+    if (ck(selected) === key) { selected = null; legalMoves = []; selectable = false; draw(); return; }
+    // Only an actually-controllable selection can execute a move by
+    // clicking one of its highlighted squares — a preview selection just
+    // switches the preview to whatever was clicked (or clears it).
+    if (selectable) {
+      const mv = legalMoves.find(m => ck(m.cell) === key);
+      if (mv) {
+        executeMove(ck(selected), mv.cell, mv);
+        selected = null; legalMoves = []; selectable = false;
+        draw();
+        return;
+      }
     }
-    if (occ && occ.player === turn) {
+    if (occ) {
       selected = cell;
       legalMoves = getLegalMoves(cell, occ, n, cellExistsGlobal, board);
+      selectable = canControlPiece(occ);
     } else {
-      selected = null; legalMoves = [];
+      selected = null; legalMoves = []; selectable = false;
     }
     draw();
     return;
   }
 
-  if (occ && occ.player === turn) {
+  if (occ) {
+    // Any piece can be selected to preview its moves — whether it's an
+    // opponent's piece, or your own piece out of turn. Only a piece that
+    // passes canControlPiece can actually be moved from this selection.
     selected = cell;
     legalMoves = getLegalMoves(cell, occ, n, cellExistsGlobal, board);
+    selectable = canControlPiece(occ);
     draw();
   }
 }
