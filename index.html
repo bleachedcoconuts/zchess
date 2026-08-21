@@ -526,7 +526,7 @@ function clampZoom(z) { return Math.max(0.15, Math.min(4, z)); }
 // linearly with n instead, anchored so n=4 (which read correctly) keeps its
 // original spacing.
 function clockRingOffset(nn) {
-  return 0.806 + 0.045 * (nn - 4);
+  return 0.806 + 0.006 * (nn - 4);
 }
 function zoomToFit() {
   boardZoom = boardZoomToFit(n);
