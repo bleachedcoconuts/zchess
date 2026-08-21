@@ -127,16 +127,6 @@
     letter-spacing: 0.3px;
   }
   button#newGameBtn:hover { filter: brightness(1.25); }
-  .gameButtonsRow { display: flex; gap: 8px; }
-  .gameButtonsRow button {
-    flex: 1; padding: 10px; border-radius: 5px; font-size: 12.5px; font-weight: 600;
-    cursor: pointer; letter-spacing: 0.3px;
-  }
-  button#abortBtn { background: #3d1c22; color: var(--paper); border: 1px solid var(--salmon); }
-  button#abortBtn:hover { filter: brightness(1.25); }
-  button#pauseBtn { background: #1c3d4a; color: var(--paper); border: 1px solid var(--teal); }
-  button#pauseBtn:hover { filter: brightness(1.25); }
-  button#pauseBtn.isPaused { background: #3d3a1c; border-color: #ababab; }
   button.ghostBtn {
     width: 100%; padding: 9px; margin-top: 8px;
     background: transparent; color: #7d8aa3; border: 1px solid #2a3350;
@@ -289,11 +279,8 @@
     padding: 4px 9px; cursor: pointer; font-size: 12px;
   }
   .roomBar button:hover { border-color: var(--salmon); color: var(--salmon); }
-  #resignBtn { background: #3d1c22; color: var(--paper); border: 1px solid var(--salmon); }
-  #resignBtn:hover { filter: brightness(1.25); }
-  #resignBtn.hidden { display: none; }
-  #setupCard.hidden { display: none; }
   #newGameBtn.hidden { display: none; }
+  #setupCard.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -364,12 +351,7 @@
         </div>
       </div>
       <div id="elimBox" class="elim"></div>
-      <button id="newGameBtn" class="hidden">New Game</button>
-      <div class="gameButtonsRow hidden" id="gameButtonsRow">
-        <button id="abortBtn">Abort Game</button>
-        <button id="pauseBtn">Pause Game</button>
-        <button id="resignBtn" class="hidden">Resign</button>
-      </div>
+      <button id="newGameBtn" class="hidden" type="button">New Game</button>
     </div>
 
     <div class="card">
@@ -1016,70 +998,6 @@ function setupSummaryText() {
   return `<b>${n}</b> players · <b>${Math.round(MOVE_LIMIT_MS/1000)}s</b>/move · <b>${Math.round(MAIN_CLOCK_MS/60000)}:00</b> clock · <b>${zombieChess ? 'zombie' : 'classic'}</b> captures`;
 }
 
-function startNewGameFromSetup() {
-  const nn = parseInt(aSlider.value, 10);
-  const moveSec = Math.max(1, parseInt(moveTimerInput.value, 10) || 30);
-  const clockMin = Math.max(1, parseInt(totalClockInput.value, 10) || 10);
-  MOVE_LIMIT_MS = moveSec * 1000;
-  MAIN_CLOCK_MS = clockMin * 60 * 1000;
-  zombieChess = document.getElementById('zombieCheck').checked;
-  gameStarted = true;
-  newGame(nn);
-  document.getElementById('newGameBtn').classList.add('hidden');
-  document.getElementById('gameButtonsRow').classList.remove('hidden');
-  document.getElementById('setupControls').classList.add('hidden');
-  const summaryEl = document.getElementById('setupSummary');
-  summaryEl.innerHTML = setupSummaryText();
-  summaryEl.classList.remove('hidden');
-  updateStatusPanel();
-}
-
-function abortGame() {
-  if (roomCode) {
-    if (!isHost) return;
-    showConfirm('Abort the current game and send everyone back to the room lobby?', async () => {
-      await update(ref(db, `rooms/${roomCode}`), { status: 'lobby' });
-    });
-    return;
-  }
-  showConfirm('Abort the current game and return to setup? This cannot be undone.', () => {
-    gameStarted = false;
-    gameOver = true;
-    paused = false; pauseStartTs = null;
-    message = '';
-    document.getElementById('newGameBtn').classList.remove('hidden');
-    document.getElementById('gameButtonsRow').classList.add('hidden');
-    document.getElementById('setupControls').classList.remove('hidden');
-    document.getElementById('setupSummary').classList.add('hidden');
-    document.getElementById('pauseBtn').textContent = 'Pause Game';
-    document.getElementById('pauseBtn').classList.remove('isPaused');
-    previewSetup(parseInt(aSlider.value, 10));
-    updateStatusPanel();
-  });
-}
-
-function togglePause() {
-  if (!gameStarted || gameOver) return;
-  if (roomCode && (isSpectator || mySeat === null || !activePlayers.includes(mySeat))) return;
-  const btn = document.getElementById('pauseBtn');
-  if (!paused) {
-    paused = true;
-    pauseStartTs = Date.now();
-    btn.textContent = 'Resume Game';
-    btn.classList.add('isPaused');
-  } else {
-    const delta = Date.now() - pauseStartTs;
-    moveStartTs += delta;
-    paused = false;
-    pauseStartTs = null;
-    btn.textContent = 'Pause Game';
-    btn.classList.remove('isPaused');
-  }
-  updateStatusPanel();
-  draw();
-  if (roomCode) pushLocalStateToRoom();
-}
-
 // ── Multiplayer (Firebase) ──────────────────────────────────────────────
 let myUid = null;
 let roomCode = null;
@@ -1129,11 +1047,6 @@ function applyRemoteState(state) {
   lastMoveHighlight = state.lastMoveHighlight || null;
   selected = null; legalMoves = []; previewMode = false;
 
-  const pauseBtn = document.getElementById('pauseBtn');
-  if (pauseBtn) {
-    pauseBtn.textContent = paused ? 'Resume Game' : 'Pause Game';
-    pauseBtn.classList.toggle('isPaused', paused);
-  }
   draw();
   updateStatusPanel();
   checkShowGameEndOverlay();
@@ -1150,7 +1063,7 @@ function checkShowGameEndOverlay() {
     document.getElementById('gameEndSub').textContent = winner !== null
       ? (mySeat === winner ? 'Congratulations!' : 'Better luck next time.')
       : 'No player has a legal move remaining.';
-    document.getElementById('playAgainBtn').classList.remove('hidden');
+    document.getElementById('playAgainBtn').classList.toggle('hidden', !isHost);
     overlay.classList.remove('hidden');
     gameEndShownFor = key;
   } else if (!gameOver) {
@@ -1272,8 +1185,7 @@ function renderRoomUI(room) {
   const lobbyOverlay = document.getElementById('lobbyOverlay');
   const waitOverlay = document.getElementById('roomWaitCard');
   const endOverlay = document.getElementById('gameEndOverlay');
-  const resignBtn = document.getElementById('resignBtn');
-  const abortBtn = document.getElementById('abortBtn');
+  const newGameBtnEl = document.getElementById('newGameBtn');
 
   lobbyOverlay.classList.add('hidden');
   renderRoomBar();
@@ -1283,7 +1195,7 @@ function renderRoomUI(room) {
     endOverlay.classList.add('hidden');
     waitOverlay.classList.remove('hidden');
     document.getElementById('setupCard').classList.remove('hidden');
-    document.getElementById('gameButtonsRow').classList.add('hidden');
+    newGameBtnEl.classList.add('hidden');
     renderSeatList();
     renderRoomSettingsCard();
   } else if (room.status === 'playing') {
@@ -1295,15 +1207,12 @@ function renderRoomUI(room) {
       MOVE_LIMIT_MS = roomConfig.moveLimitMs;
       MAIN_CLOCK_MS = roomConfig.mainClockMs;
       gameStarted = true;
-      document.getElementById('gameButtonsRow').classList.remove('hidden');
       const summaryEl = document.getElementById('setupSummary');
       if (summaryEl) summaryEl.classList.add('hidden');
       setTimeout(zoomToFit, 0);
     }
     gameStarted = true;
-    abortBtn.classList.toggle('hidden', !isHost);
-    const canResign = !isSpectator && mySeat !== null && !gameOver && activePlayers.includes(mySeat);
-    resignBtn.classList.toggle('hidden', !canResign);
+    newGameBtnEl.classList.toggle('hidden', !isHost);
   }
   lastKnownStatus = room.status;
 }
@@ -1439,8 +1348,42 @@ async function startGameAsHost() {
   await writeFreshGameState();
 }
 async function playAgain() {
-  if (!roomCode) return;
+  if (!roomCode || !isHost) return;
   await writeFreshGameState();
+}
+
+// Deletes a room outright once nobody is left connected in it, so rooms
+// don't pile up in Firebase after everyone's tab is closed or they've left.
+async function cleanupRoomIfEmpty(code, excludeUid) {
+  try {
+    const snap = await get(ref(db, `rooms/${code}/players`));
+    const players = snap.val() || {};
+    const stillHere = Object.keys(players).some(
+      (uid) => uid !== excludeUid && players[uid] && players[uid].connected !== false
+    );
+    if (!stillHere) await remove(ref(db, `rooms/${code}`));
+  } catch (e) {}
+}
+
+// Best-effort garbage collection for rooms abandoned by a closed tab (where
+// no explicit "Leave Room" click ever fires): on load, sweep for rooms where
+// every player shows connected:false and delete them. New rooms get a grace
+// period so this can't race a room that's still being set up.
+async function sweepStaleRooms() {
+  try {
+    const snap = await get(ref(db, 'rooms'));
+    const rooms = snap.val();
+    if (!rooms) return;
+    const now = Date.now();
+    for (const code in rooms) {
+      const room = rooms[code];
+      if (!room || !room.createdAt || now - room.createdAt < 60000) continue;
+      const players = room.players || {};
+      const uids = Object.keys(players);
+      const allDisconnected = uids.length === 0 || uids.every((uid) => players[uid] && players[uid].connected === false);
+      if (allDisconnected) remove(ref(db, `rooms/${code}`)).catch(() => {});
+    }
+  } catch (e) {}
 }
 
 function leaveRoomLocal() {
@@ -1448,6 +1391,7 @@ function leaveRoomLocal() {
   const uidAtLeave = myUid, codeAtLeave = roomCode;
   if (codeAtLeave && uidAtLeave) {
     set(ref(db, `rooms/${codeAtLeave}/players/${uidAtLeave}/connected`), false).catch(() => {});
+    cleanupRoomIfEmpty(codeAtLeave, uidAtLeave);
   }
   roomCode = null; roomConfig = null; mySeat = null; isSpectator = false; isHost = false;
   gameStarted = false; roomStatus = null; lastKnownStatus = null;
@@ -1455,7 +1399,7 @@ function leaveRoomLocal() {
   document.getElementById('roomWaitCard').classList.add('hidden');
   document.getElementById('setupCard').classList.add('hidden');
   document.getElementById('gameEndOverlay').classList.add('hidden');
-  document.getElementById('gameButtonsRow').classList.add('hidden');
+  document.getElementById('newGameBtn').classList.add('hidden');
   document.getElementById('lobbyOverlay').classList.remove('hidden');
   clearLobbyError();
   renderRoomBar();
@@ -1488,10 +1432,6 @@ document.getElementById('leaveRoomBtn').addEventListener('click', () => {
 });
 document.getElementById('topLeaveBtn').addEventListener('click', () => {
   showConfirm('Leave this room? You can rejoin later with the room code.', () => leaveRoomLocal());
-});
-document.getElementById('resignBtn').addEventListener('click', () => {
-  if (mySeat === null || !activePlayers.includes(mySeat) || gameOver) return;
-  showConfirm(`Resign as Player ${mySeat + 1}? This cannot be undone.`, () => resignPlayer(mySeat));
 });
 document.getElementById('playAgainBtn').addEventListener('click', () => {
   playAgain();
@@ -2096,9 +2036,10 @@ canvas.addEventListener('touchend', (ev) => {
   }
 }, {passive:false});
 
-document.getElementById('newGameBtn').addEventListener('click', startNewGameFromSetup);
-document.getElementById('abortBtn').addEventListener('click', abortGame);
-document.getElementById('pauseBtn').addEventListener('click', togglePause);
+document.getElementById('newGameBtn').addEventListener('click', () => {
+  if (!roomCode || !isHost) return;
+  showConfirm('Start a new game with the same room settings? This ends the current game for everyone.', () => playAgain());
+});
 document.getElementById('fitBtn').addEventListener('click', zoomToFit);
 
 aSlider.addEventListener('input', () => {
@@ -2161,6 +2102,10 @@ resizeCanvas();
 
 updateStatusPanel();
 setInterval(tickClock, 250);
+
+// Sign in immediately (rather than waiting for a Create/Join click) so we
+// can sweep out rooms left behind by closed tabs as soon as the page loads.
+ensureSignedIn().then(sweepStaleRooms).catch(() => {});
 </script>
 </body>
 </html>
