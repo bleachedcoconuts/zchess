@@ -177,6 +177,14 @@
   .boardClock .bcProgress { transition: stroke-dashoffset 0.22s linear, stroke 0.4s ease; }
   .boardClock.overage .bcProgress { animation: pulseRing 1.1s ease-in-out infinite; }
   .boardClock.out { opacity: 0.3; }
+  #boardClockLabels { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+  .boardClockLabel {
+    position: absolute; top: 0; left: 0;
+    font-size: 12px; font-weight: 600; color: #e8ecf4; white-space: nowrap;
+    pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+  }
+  .boardClockLabel.side-right { transform: translate(0,-50%); text-align: left; }
+  .boardClockLabel.side-left { transform: translate(-100%,-50%); text-align: right; }
   .confirmOverlay {
     position: fixed; inset: 0; background: rgba(5,7,14,0.65);
     display: flex; align-items: center; justify-content: center; z-index: 50;
@@ -307,6 +315,7 @@
     <div class="canvasWrap">
       <canvas id="c"></canvas>
       <div id="boardClocks"></div>
+      <div id="boardClockLabels"></div>
       <button id="fitBtn" title="Zoom to fit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
@@ -525,8 +534,17 @@ function clampZoom(z) { return Math.max(0.15, Math.min(4, z)); }
 // tight against the board at higher player counts. It now grows gently and
 // linearly with n instead, anchored so n=4 (which read correctly) keeps its
 // original spacing.
+// World-space distance from an edge's back rail (row 0) to its clock ring
+// center, measured along the edge's outward normal. Base spacing is the
+// original per-edge-cell-width formula (which reads correctly through most
+// of the n=3–7 range); a gentle exponential multiplier nudges it outward a
+// bit further as n climbs toward 8, where the shrinking cell width used to
+// pull the ring in too tight against the board.
 function clockRingOffset(nn) {
-  return 0.806 + 0.006 * (nn - 4);
+  const a = (2 * Math.PI) / nn;
+  const half = computeBoardHalfExtent(nn) || 1;
+  const cellW = (2 * half * Math.sin(a / 2)) / 10;
+  return 2.85 * cellW * Math.pow(1.025, nn - 4);
 }
 function zoomToFit() {
   boardZoom = boardZoomToFit(n);
@@ -1728,8 +1746,15 @@ function miniRingSvg(p, active, out) {
 // with the board and get naturally clipped by canvasWrap's overflow:hidden
 // when they land outside the visible window. No clamping. ─────────────────
 const boardClocksEl = document.getElementById('boardClocks');
+const boardClockLabelsEl = document.getElementById('boardClockLabels');
+// A seat with no room and no player sitting in it yet shouldn't show a
+// piece set or a clock ring — only local (no-room) games, where every seat
+// is always "filled", skip this check entirely.
+function seatFilled(p) {
+  return !roomCode || !!roomSeats[p];
+}
 function updateBoardClocks() {
-  if (!boardClocksEl || !lastEdgeGeom || boardPan.x === null) return;
+  if (!boardClocksEl || !boardClockLabelsEl || !lastEdgeGeom || boardPan.x === null) return;
   while (boardClocksEl.children.length < n) {
     const el = document.createElement('div');
     el.className = 'boardClock';
@@ -1740,14 +1765,25 @@ function updateBoardClocks() {
     boardClocksEl.appendChild(el);
   }
   while (boardClocksEl.children.length > n) boardClocksEl.removeChild(boardClocksEl.lastChild);
+  while (boardClockLabelsEl.children.length < n) {
+    const el = document.createElement('div');
+    el.className = 'boardClockLabel';
+    boardClockLabelsEl.appendChild(el);
+  }
+  while (boardClockLabelsEl.children.length > n) boardClockLabelsEl.removeChild(boardClockLabelsEl.lastChild);
 
   const scale = (W / 5) * boardZoom;
   const worldR = 0.16; // ring size in world units — scales with board zoom
   const sizePx = Math.max(14, worldR * scale * 2);
   for (let p = 0; p < n; p++) {
     const el = boardClocksEl.children[p];
+    const labelEl = boardClockLabelsEl.children[p];
     const eg = lastEdgeGeom[p];
-    if (!eg) { el.style.display = 'none'; continue; }
+    if (!eg || !seatFilled(p)) {
+      el.style.display = 'none';
+      labelEl.style.display = 'none';
+      continue;
+    }
     el.style.display = 'block';
 
     const offset = clockRingOffset(n);
@@ -1760,6 +1796,18 @@ function updateBoardClocks() {
     el.style.top = sy + 'px';
     el.style.width = sizePx + 'px';
     el.style.height = sizePx + 'px';
+
+    // Keep the name label clear of the board: put it on whichever side of
+    // the ring points away from board center, so it never reads over the
+    // playing surface.
+    const onRight = sx >= boardPan.x;
+    labelEl.style.display = 'block';
+    labelEl.classList.toggle('side-right', onRight);
+    labelEl.classList.toggle('side-left', !onRight);
+    labelEl.style.left = (sx + (onRight ? 1 : -1) * (sizePx / 2 + 6)) + 'px';
+    labelEl.style.top = sy + 'px';
+    labelEl.style.color = playerColor(p, n);
+    labelEl.textContent = playerLabel(p);
 
     const out = !activePlayers.includes(p);
     const active = !out && p === turn && !gameOver && gameStarted;
@@ -2073,6 +2121,7 @@ function draw() {
   // ── Pieces (drawn in screen space — text must not be y-flipped) ────────
   for (const key in board) {
     const info = board[key];
+    if (!seatFilled(info.player)) continue;
     const g = cellGeoOfGlobal(keyToCell(key));
     if (!g) continue;
     const [rcx, rcy] = rotateByAngle(g.cx, g.cy, viewRotation);
