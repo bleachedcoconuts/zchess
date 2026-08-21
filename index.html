@@ -969,19 +969,22 @@ function genKnight(startCell, n, cellExists, board) {
 // logic but capped at the first real diagonal cell and returns the
 // direction the pawn should treat as "forward" from its new square.
 function diagonalStep(startCell, initDir, startCW, n, cellExists) {
-  let cur = startCell, dir = initDir, turnCW = startCW, mirror = false, stepCount = 0, landDir = null;
+  let cur = startCell, dir = initDir, turnCW = startCW, mirror = false, stepCount = 0;
   while (stepCount < 2) {
     const nxt = anyStep(cur, dir, n);
     if (!nxt || !cellExists(nxt)) return null;
     stepCount++;
     if (cur.type !== nxt.type) mirror = !mirror;
     const effectiveCW = mirror ? !turnCW : turnCW;
-    landDir = nxt.dir;
     dir = effectiveCW ? DIR_CW[nxt.dir] : DIR_CCW[nxt.dir];
     turnCW = !turnCW;
     cur = nxt;
   }
-  return {cell: cur, dir: landDir};
+  // `dir` here is the recomputed direction for continuing the same diagonal
+  // ray (same convention genSlideDiag uses), not the raw heading of the
+  // last half-step — those two are perpendicular to each other, and mixing
+  // them up is what sent captured-into pawns off at a 90° angle.
+  return {cell: cur, dir: dir};
 }
 
 // Pawn: forward 1 (or 2 on first move, path must be empty, no capture
@@ -1215,8 +1218,10 @@ function executeMove(fromKey, toCell, meta) {
     board[meta.rookTo] = {player: rookInfo.player, type: 'R', moved: true};
   }
 
-  // Pawn promotion: reaching any edge that isn't the pawn's own home edge.
-  const needsPromotion = info.type === 'P' && toCell.type === 'edge' && toCell.ei !== info.player;
+  // Pawn promotion: a foreign edge is entered at row 0 first (the near
+  // side); the true far edge of the board — the point a pawn can't advance
+  // past — is row 1 of that edge, so only that should trigger promotion.
+  const needsPromotion = info.type === 'P' && toCell.type === 'edge' && toCell.ei !== info.player && toCell.row === 1;
 
   if (eliminated !== null) {
     activePlayers = activePlayers.filter(p => p !== eliminated);
@@ -2435,9 +2440,6 @@ function draw() {
     const ascent = gm.actualBoundingBoxAscent ?? r*0.85;
     const descent = gm.actualBoundingBoxDescent ?? r*0.15;
     const drawY = sy + (ascent - descent) / 2;
-    ctx.lineWidth = Math.max(1, r * 0.09);
-    ctx.strokeStyle = theme === 'pastel' ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.55)';
-    ctx.strokeText(glyph, sx, drawY);
     ctx.fillStyle = playerColor(info.player, n); ctx.fillText(glyph, sx, drawY);
   }
 
