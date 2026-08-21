@@ -267,6 +267,11 @@
   .seatRow.empty .name { color: #5a6580; font-style: italic; font-weight: 400; }
   .seatRow.me { border-color: var(--sky); }
   .seatRow.disc { opacity: 0.7; }
+  .seatRow.clickable { cursor: pointer; transition: border-color .12s, background .12s; }
+  .seatRow.clickable:hover { border-color: var(--sky); background: #0d1220; }
+  .seatRow.clickable.empty:hover .name { color: var(--sky); }
+  .seatRow.clickable.me:hover { border-color: var(--salmon); }
+  .seatRow.taken { cursor: default; }
   .youAreLabel { text-align: center; font-size: 12.5px; color: #b8c2d8; margin-bottom: 12px; }
   .waitHint { text-align: center; font-size: 12px; color: #5a6580; margin-top: 10px; }
   .gameEndTitle { font-size: 22px; font-weight: 700; color: #e8ecf4; text-align: center; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -313,7 +318,35 @@
     </div>
   </div>
   <div id="panel">
-    <div class="card">
+    <div class="card hidden" id="roomLobbyCard">
+      <h2>Room <span style="font-weight:400; text-transform:none; letter-spacing:0; color:#5a5f6b;">— waiting to start</span></h2>
+      <div class="roomCodeDisplay"><span id="roomCodeText">-----</span> <button id="copyCodeBtn" type="button" title="Copy room code">⧉</button></div>
+      <div id="seatList" class="seatList"></div>
+      <div id="youAreLabel" class="youAreLabel"></div>
+      <div id="roomSettings">
+        <div class="row">
+          <label>Players <span class="val" id="roomAVal">4</span></label>
+          <input type="range" id="roomASlider" min="3" max="8" step="1" value="4">
+          <div class="ticks"><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span></div>
+        </div>
+        <div class="numRow">
+          <span>Move timer (sec)</span>
+          <input type="number" id="roomMoveTimerInput" min="5" max="600" step="5" value="30">
+        </div>
+        <div class="numRow">
+          <span>Total clock (min)</span>
+          <input type="number" id="roomTotalClockInput" min="1" max="180" step="1" value="10">
+        </div>
+        <div class="toggles" style="margin-bottom:14px;">
+          <label><input type="checkbox" id="roomZombieCheck"> Zombie chess (captured king's pieces defect to capturer)</label>
+        </div>
+      </div>
+      <button id="startGameBtn" class="lobbyPrimaryBtn hidden" type="button">Start Game</button>
+      <div id="waitHint" class="waitHint"></div>
+      <button id="leaveRoomBtn" class="lobbySecondaryBtn" type="button">Leave Room</button>
+    </div>
+
+    <div class="card" id="gameStatusCard">
       <div id="statusBox" class="status-box">Loading…</div>
       <div class="circleTimerWrap">
         <svg class="circleTimer" viewBox="0 0 100 100">
@@ -358,7 +391,7 @@
       <div id="setupSummary" class="setupSummary hidden"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="clocksCard">
       <h2>Clocks <span id="clocksHeaderInfo" style="font-weight:400; text-transform:none; letter-spacing:0; color:#5a5f6b;">— 30s/move, 10:00 total</span></h2>
       <div id="clocksBox" class="clocks-list"></div>
     </div>
@@ -373,16 +406,6 @@
       <button class="lobbyTabBtn" id="lobbyTabJoinBtn" type="button">Join Room</button>
     </div>
     <div id="lobbyCreateTab" class="lobbyTab">
-      <div class="row">
-        <label>Players <span class="val" id="lobbyAVal">4</span></label>
-        <input type="range" id="lobbyASlider" min="3" max="8" step="1" value="4">
-        <div class="ticks"><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span></div>
-      </div>
-      <div class="numRow"><span>Move timer (sec)</span><input type="number" id="lobbyMoveTimerInput" min="5" max="600" step="5" value="30"></div>
-      <div class="numRow"><span>Total clock (min)</span><input type="number" id="lobbyTotalClockInput" min="1" max="180" step="1" value="10"></div>
-      <div class="toggles" style="margin-bottom:14px;">
-        <label><input type="checkbox" id="lobbyZombieCheck"> Zombie chess (captured king's pieces defect to capturer)</label>
-      </div>
       <div class="numRow"><span>Your name</span><input type="text" id="lobbyNameInputCreate" maxlength="16" placeholder="Player"></div>
       <button id="lobbyCreateBtn" class="lobbyPrimaryBtn" type="button">Create Room</button>
     </div>
@@ -393,18 +416,6 @@
     </div>
     <div id="lobbyError" class="lobbyError hidden"></div>
     <div id="lobbyStatus" class="lobbyStatus"></div>
-  </div>
-</div>
-
-<div class="fullOverlay hidden" id="roomWaitOverlay">
-  <div class="lobbyBox">
-    <div class="brand"><span class="mark">♞</span> Limaçon Chess</div>
-    <div class="roomCodeDisplay"><span id="roomCodeText">-----</span> <button id="copyCodeBtn" type="button" title="Copy room code">⧉</button></div>
-    <div id="seatList" class="seatList"></div>
-    <div id="youAreLabel" class="youAreLabel"></div>
-    <button id="startGameBtn" class="lobbyPrimaryBtn hidden" type="button">Start Game</button>
-    <div id="waitHint" class="waitHint"></div>
-    <button id="leaveRoomBtn" class="lobbySecondaryBtn" type="button">Leave Room</button>
   </div>
 </div>
 
@@ -1196,6 +1207,7 @@ function renderSeatList() {
   if (!listEl) return;
   const codeEl = document.getElementById('roomCodeText');
   if (codeEl) codeEl.textContent = roomCode || '-----';
+  const canPick = roomStatus === 'lobby';
   let html = '';
   for (let s = 0; s < nn; s++) {
     const uid = roomSeats[s];
@@ -1203,16 +1215,28 @@ function renderSeatList() {
     const mine = uid && uid === myUid;
     const connected = seatIsConnected(uid);
     const color = playerColor(s, nn);
-    html += `<div class="seatRow ${p ? '' : 'empty'} ${mine ? 'me' : ''} ${p && !connected ? 'disc' : ''}">
+    // Empty seats are clickable to sit down; your own seat is clickable to
+    // stand back up; seats held by someone else are inert.
+    const clickable = canPick && (!p || mine);
+    html += `<div class="seatRow ${p ? 'taken' : 'empty'} ${mine ? 'me' : ''} ${p && !connected ? 'disc' : ''} ${clickable ? 'clickable' : ''}" data-seat="${s}">
       <span class="who"><span class="dot" style="background:${color}"></span>Player ${s + 1}</span>
-      <span class="name">${p ? (p.name || 'Player') + (mine ? ' (you)' : '') : 'Empty seat'}${p && !connected ? '<span class="discTag">Disconnected</span>' : ''}</span>
+      <span class="name">${p ? (p.name || 'Player') + (mine ? ' (you — tap to stand)' : '') : (canPick ? 'Empty — tap to sit' : 'Empty seat')}${p && !connected ? '<span class="discTag">Disconnected</span>' : ''}</span>
     </div>`;
   }
   listEl.innerHTML = html;
+  if (canPick) {
+    listEl.querySelectorAll('.seatRow.clickable').forEach(row => {
+      row.addEventListener('click', () => {
+        const s = parseInt(row.dataset.seat, 10);
+        if (roomSeats[s] && roomSeats[s] === myUid) leaveSeat();
+        else if (!roomSeats[s]) claimSeat(s);
+      });
+    });
+  }
 
   const seatedCount = Object.keys(roomSeats).length;
   const youAre = document.getElementById('youAreLabel');
-  if (isSpectator) youAre.textContent = `You're spectating this room (seats full).`;
+  if (isSpectator) youAre.textContent = seatedCount >= nn ? `You're spectating this room (seats full).` : `You're spectating — tap an empty seat to sit down.`;
   else if (mySeat !== null) youAre.textContent = `You're Player ${mySeat + 1}.`;
   else youAre.textContent = '';
 
@@ -1228,6 +1252,45 @@ function renderSeatList() {
   }
 }
 
+async function claimSeat(s) {
+  if (!roomCode || roomStatus !== 'lobby') return;
+  if (roomSeats[s]) return; // already taken, race with someone else
+  const nn = (roomConfig && roomConfig.n) || n;
+  if (s < 0 || s >= nn) return;
+  const updates = {};
+  if (mySeat !== null && mySeat !== s) updates[`seats/${mySeat}`] = null; // vacate any seat you're already in
+  updates[`seats/${s}`] = myUid;
+  updates[`players/${myUid}/seat`] = s;
+  try { await update(ref(db, `rooms/${roomCode}`), updates); } catch (e) {}
+}
+
+async function leaveSeat() {
+  if (!roomCode || roomStatus !== 'lobby' || mySeat === null) return;
+  const updates = {};
+  updates[`seats/${mySeat}`] = null;
+  updates[`players/${myUid}/seat`] = -1;
+  try { await update(ref(db, `rooms/${roomCode}`), updates); } catch (e) {}
+}
+
+function renderRoomSettings() {
+  if (!roomConfig) return;
+  const aSlider = document.getElementById('roomASlider');
+  const aVal = document.getElementById('roomAVal');
+  const moveInput = document.getElementById('roomMoveTimerInput');
+  const clockInput = document.getElementById('roomTotalClockInput');
+  const zombieCheck = document.getElementById('roomZombieCheck');
+  // Skip refreshing whichever control the host currently has focus on, so
+  // an incoming update doesn't fight with what they're mid-typing.
+  if (document.activeElement !== aSlider) { aSlider.value = roomConfig.n; aVal.textContent = roomConfig.n; }
+  if (document.activeElement !== moveInput) moveInput.value = Math.round(roomConfig.moveLimitMs / 1000);
+  if (document.activeElement !== clockInput) clockInput.value = Math.round(roomConfig.mainClockMs / 60000);
+  zombieCheck.checked = !!roomConfig.zombie;
+  aSlider.disabled = !isHost;
+  moveInput.disabled = !isHost;
+  clockInput.disabled = !isHost;
+  zombieCheck.disabled = !isHost;
+}
+
 function renderRoomBar() {
   const bar = document.getElementById('roomBar');
   if (!bar) return;
@@ -1239,7 +1302,9 @@ function renderRoomBar() {
 
 function renderRoomUI(room) {
   const lobbyOverlay = document.getElementById('lobbyOverlay');
-  const waitOverlay = document.getElementById('roomWaitOverlay');
+  const lobbyCard = document.getElementById('roomLobbyCard');
+  const statusCard = document.getElementById('gameStatusCard');
+  const clocksCard = document.getElementById('clocksCard');
   const endOverlay = document.getElementById('gameEndOverlay');
   const resignBtn = document.getElementById('resignBtn');
   const abortBtn = document.getElementById('abortBtn');
@@ -1251,11 +1316,16 @@ function renderRoomUI(room) {
   if (room.status === 'lobby') {
     gameStarted = false;
     endOverlay.classList.add('hidden');
-    waitOverlay.classList.remove('hidden');
+    lobbyCard.classList.remove('hidden');
+    statusCard.classList.add('hidden');
+    clocksCard.classList.add('hidden');
     document.getElementById('gameButtonsRow').classList.add('hidden');
     renderSeatList();
+    renderRoomSettings();
   } else if (room.status === 'playing') {
-    waitOverlay.classList.add('hidden');
+    lobbyCard.classList.add('hidden');
+    statusCard.classList.remove('hidden');
+    clocksCard.classList.remove('hidden');
     if (lastKnownStatus !== 'playing') {
       // Fresh transition into a game: size the board for this room's player count.
       n = roomConfig.n;
@@ -1295,11 +1365,10 @@ function computeMyRole(room) {
 // will catch this and perform the cleanup; remove() is idempotent so it's
 // safe if more than one client races to call it.
 function maybeCleanupAbandonedRoom(code, room) {
-  const seats = room.seats || {};
   const players = room.players || {};
-  const seatUids = Object.values(seats);
-  if (!seatUids.length) return;
-  const allGone = seatUids.every(uid => {
+  const uids = Object.keys(players);
+  if (!uids.length) return;
+  const allGone = uids.every(uid => {
     const p = players[uid];
     return !p || p.connected === false;
   });
@@ -1348,24 +1417,22 @@ async function ensureSignedIn() {
   });
 }
 
+const DEFAULT_ROOM_CONFIG = { n: 4, moveLimitMs: 30000, mainClockMs: 600000, zombie: false };
+
 async function createRoom() {
   clearLobbyError();
   try {
     await ensureSignedIn();
     sweepAbandonedRooms(); // opportunistic cleanup, don't block on it
-    const nn = parseInt(document.getElementById('lobbyASlider').value, 10);
-    const moveSec = Math.max(1, parseInt(document.getElementById('lobbyMoveTimerInput').value, 10) || 30);
-    const clockMin = Math.max(1, parseInt(document.getElementById('lobbyTotalClockInput').value, 10) || 10);
-    const zombie = !!document.getElementById('lobbyZombieCheck').checked;
     const name = (document.getElementById('lobbyNameInputCreate').value || 'Player 1').trim().slice(0, 16) || 'Player 1';
     const code = makeRoomCode();
-    const config = { n: nn, moveLimitMs: moveSec * 1000, mainClockMs: clockMin * 60 * 1000, zombie };
+    const config = { ...DEFAULT_ROOM_CONFIG };
     await set(ref(db, `rooms/${code}`), {
       hostUid: myUid,
       status: 'lobby',
       config,
-      seats: { 0: myUid },
-      players: { [myUid]: { name, seat: 0 } },
+      seats: {},
+      players: { [myUid]: { name, seat: -1 } },
       createdAt: Date.now()
     });
     enterRoom(code);
@@ -1393,14 +1460,8 @@ async function joinRoom() {
       if (existingSeats[s] === myUid) { enterRoom(code); return; }
     }
 
-    const nn = room.config.n;
-    const takenCount = Object.keys(existingSeats).length;
-    const updates = {};
-    updates[`players/${myUid}`] = { name, seat: takenCount < nn ? takenCount : -1 };
-    if (takenCount < nn) {
-      updates[`seats/${takenCount}`] = myUid;
-    }
-    await update(roomRef, updates);
+    // New arrivals join as spectators — they pick their own seat once inside.
+    await update(roomRef, { [`players/${myUid}`]: { name, seat: -1 } });
     enterRoom(code);
   } catch (err) {
     showLobbyError('Could not join room: ' + err.message);
@@ -1449,7 +1510,7 @@ async function leaveRoomLocal() {
   }
   roomCode = null; roomConfig = null; mySeat = null; isSpectator = false; isHost = false;
   gameStarted = false; roomStatus = null; lastKnownStatus = null;
-  document.getElementById('roomWaitOverlay').classList.add('hidden');
+  document.getElementById('roomLobbyCard').classList.add('hidden');
   document.getElementById('gameEndOverlay').classList.add('hidden');
   document.getElementById('gameButtonsRow').classList.add('hidden');
   document.getElementById('lobbyOverlay').classList.remove('hidden');
@@ -1457,9 +1518,34 @@ async function leaveRoomLocal() {
 }
 
 // ── Wire up lobby / room / end-screen UI ────────────────────────────────
-const lobbyASlider = document.getElementById('lobbyASlider');
-const lobbyAVal = document.getElementById('lobbyAVal');
-lobbyASlider.addEventListener('input', () => { lobbyAVal.textContent = lobbyASlider.value; });
+
+// Host-editable room settings, shown inline in the room lobby card. Any
+// change while in the lobby pushes the new config straight to Firebase;
+// renderRoomSettings() (via listenRoom's onValue) reflects it back to
+// everyone, including non-host clients (whose inputs stay disabled).
+function pushRoomConfigChange(partial) {
+  if (!roomCode || !isHost || !roomConfig) return;
+  const config = { ...roomConfig, ...partial };
+  roomConfig = config;
+  update(ref(db, `rooms/${roomCode}`), { config }).catch(() => {});
+}
+const roomASlider = document.getElementById('roomASlider');
+const roomAVal = document.getElementById('roomAVal');
+roomASlider.addEventListener('input', () => { roomAVal.textContent = roomASlider.value; });
+roomASlider.addEventListener('change', () => {
+  pushRoomConfigChange({ n: parseInt(roomASlider.value, 10) });
+});
+document.getElementById('roomMoveTimerInput').addEventListener('change', (e) => {
+  const sec = Math.max(1, parseInt(e.target.value, 10) || 30);
+  pushRoomConfigChange({ moveLimitMs: sec * 1000 });
+});
+document.getElementById('roomTotalClockInput').addEventListener('change', (e) => {
+  const min = Math.max(1, parseInt(e.target.value, 10) || 10);
+  pushRoomConfigChange({ mainClockMs: min * 60 * 1000 });
+});
+document.getElementById('roomZombieCheck').addEventListener('change', (e) => {
+  pushRoomConfigChange({ zombie: !!e.target.checked });
+});
 
 document.getElementById('lobbyTabCreateBtn').addEventListener('click', () => {
   document.getElementById('lobbyTabCreateBtn').classList.add('active');
