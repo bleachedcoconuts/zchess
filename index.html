@@ -472,6 +472,26 @@ let boardPan = {x: null, y: null}; // screen-space translate origin; set on firs
 let lastDrawnZoom = 1;
 let boardZoom = 1; // fixed zoom level — only changed via the "zoom to fit" button
 
+// ── Perspective rotation: rotates the whole board so the viewing player's
+// home edge sits at the bottom of the screen. In a room, the view is locked
+// to mySeat; in local pass-and-play (no room), it follows whoever's turn it
+// is. Piece glyphs are drawn upright regardless (never rotated). ──────────
+let viewRotation = 0;
+function rotateByAngle(x, y, theta) {
+  const c = Math.cos(theta), s = Math.sin(theta);
+  return [x * c - y * s, x * s + y * c];
+}
+function currentViewSeat() {
+  if (roomCode) return mySeat !== null ? mySeat : 0;
+  return turn;
+}
+function computeViewRotation(nn) {
+  if (!gameStarted) return 0;
+  const seat = currentViewSeat();
+  const a = (2 * Math.PI) / nn;
+  return (seat + 0.5) * a - Math.PI;
+}
+
 // World-space half-extent of the board's outer boundary, used to compute a
 // zoom level that fits the whole board inside the canvas.
 function computeBoardHalfExtent(nn) {
@@ -870,7 +890,7 @@ function currentMoveOverage() {
   return Math.max(0, currentMoveElapsed() - MOVE_LIMIT_MS);
 }
 function liveClock(p) {
-  if (gameOver || p !== turn || !activePlayers.includes(p)) return clocks[p];
+  if (!gameStarted || gameOver || p !== turn || !activePlayers.includes(p)) return clocks[p];
   return Math.max(0, clocks[p] - currentMoveOverage());
 }
 function formatClock(ms) {
@@ -1530,7 +1550,20 @@ function pushRoomConfigChange(partial) {
   if (!roomCode || !isHost || !roomConfig) return;
   const config = { ...roomConfig, ...partial };
   roomConfig = config;
-  update(ref(db, `rooms/${roomCode}`), { config }).catch(() => {});
+  const updates = { config };
+  if (partial.n !== undefined) {
+    // Shrinking the player count can strand seated players on seat numbers
+    // that no longer exist — bump them back to spectating instead of
+    // leaving them stuck in a seat nobody can see or interact with.
+    for (const s in roomSeats) {
+      if (parseInt(s, 10) >= partial.n) {
+        const uid = roomSeats[s];
+        updates[`seats/${s}`] = null;
+        if (uid) updates[`players/${uid}/seat`] = -1;
+      }
+    }
+  }
+  update(ref(db, `rooms/${roomCode}`), updates).catch(() => {});
 }
 const roomASlider = document.getElementById('roomASlider');
 const roomAVal = document.getElementById('roomAVal');
@@ -1701,8 +1734,9 @@ function updateBoardClocks() {
     const gap = eg.cellW * 0.85;
     const wx = eg.originX + 4 * eg.cellW * eg.ux + (2 * eg.cellW + gap) * eg.nx;
     const wy = eg.originY + 4 * eg.cellH * eg.uy + (2 * eg.cellH + gap) * eg.ny;
-    const sx = boardPan.x + wx * scale;
-    const sy = boardPan.y - wy * scale;
+    const [rwx, rwy] = rotateByAngle(wx, wy, viewRotation);
+    const sx = boardPan.x + rwx * scale;
+    const sy = boardPan.y - rwy * scale;
     el.style.left = sx + 'px';
     el.style.top = sy + 'px';
     el.style.width = sizePx + 'px';
@@ -1787,11 +1821,14 @@ function draw() {
   const a = (2 * Math.PI) / n;
   const zoom = boardZoom;
 
+  viewRotation = computeViewRotation(n);
+
   ctx.clearRect(0, 0, W, H);
   ctx.save();
   ctx.translate(boardPan.x, boardPan.y);
   const scale = (W / 5) * zoom;
   ctx.scale(scale, -scale);
+  ctx.rotate(viewRotation);
   lastDrawnZoom = zoom;
 
   const rList = [0,1,2,3,4,5,6,7,8];
@@ -2019,7 +2056,8 @@ function draw() {
     const info = board[key];
     const g = cellGeoOfGlobal(keyToCell(key));
     if (!g) continue;
-    const sx = boardPan.x + g.cx*scale, sy = boardPan.y - g.cy*scale;
+    const [rcx, rcy] = rotateByAngle(g.cx, g.cy, viewRotation);
+    const sx = boardPan.x + rcx*scale, sy = boardPan.y - rcy*scale;
     const side = Math.hypot(g.pts[1][0]-g.pts[0][0], g.pts[1][1]-g.pts[0][1]);
     const r = Math.max(4, side*scale*0.42);
     ctx.font = `${r*1.7}px serif`;
@@ -2077,7 +2115,8 @@ function handleCanvasTap(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   const mx = clientX-rect.left, my = clientY-rect.top;
   const scale = (W/5)*boardZoom;
-  const wx = (mx-boardPan.x)/scale, wy = -(my-boardPan.y)/scale;
+  const rx = (mx-boardPan.x)/scale, ry = -(my-boardPan.y)/scale;
+  const [wx, wy] = rotateByAngle(rx, ry, -viewRotation);
 
   let clicked = null;
   for (const key in lastWedgeCells) {
