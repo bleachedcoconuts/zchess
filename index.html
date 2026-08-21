@@ -307,6 +307,14 @@
     </div>
   </div>
   <div id="panel">
+    <div class="card hidden" id="roomWaitCard">
+      <div class="roomCodeDisplay"><span id="roomCodeText">-----</span> <button id="copyCodeBtn" type="button" title="Copy room code">⧉</button></div>
+      <div id="seatList" class="seatList"></div>
+      <div id="youAreLabel" class="youAreLabel"></div>
+      <button id="startGameBtn" class="lobbyPrimaryBtn hidden" type="button">Start Game</button>
+      <div id="waitHint" class="waitHint"></div>
+      <button id="leaveRoomBtn" class="lobbySecondaryBtn" type="button">Leave Room</button>
+    </div>
     <div class="card">
       <div id="statusBox" class="status-box">Loading…</div>
       <div class="circleTimerWrap">
@@ -381,18 +389,6 @@
     </div>
     <div id="lobbyError" class="lobbyError hidden"></div>
     <div id="lobbyStatus" class="lobbyStatus"></div>
-  </div>
-</div>
-
-<div class="fullOverlay hidden" id="roomWaitOverlay">
-  <div class="lobbyBox">
-    <div class="brand"><span class="mark">♞</span> Limaçon Chess</div>
-    <div class="roomCodeDisplay"><span id="roomCodeText">-----</span> <button id="copyCodeBtn" type="button" title="Copy room code">⧉</button></div>
-    <div id="seatList" class="seatList"></div>
-    <div id="youAreLabel" class="youAreLabel"></div>
-    <button id="startGameBtn" class="lobbyPrimaryBtn hidden" type="button">Start Game</button>
-    <div id="waitHint" class="waitHint"></div>
-    <button id="leaveRoomBtn" class="lobbySecondaryBtn" type="button">Leave Room</button>
   </div>
 </div>
 
@@ -950,8 +946,10 @@ function executeMove(fromKey, toCell, meta) {
 
   if (eliminated !== null) {
     activePlayers = activePlayers.filter(p => p !== eliminated);
-    for (const k in board) if (board[k].player === eliminated) delete board[k];
-    message = `Player ${eliminated+1} eliminated!`;
+    // Zombie chess: the eliminated player's surviving army defects to
+    // whoever captured their king, instead of vanishing.
+    for (const k in board) if (board[k].player === eliminated) board[k].player = mover;
+    message = `Player ${eliminated+1} eliminated! Player ${mover+1} claims their army.`;
   } else {
     message = '';
   }
@@ -1097,7 +1095,7 @@ function applyRemoteState(state) {
   winner = state.winner != null ? state.winner : null;
   message = state.message || '';
   lastMoveHighlight = state.lastMoveHighlight || null;
-  if (turn !== mySeat || gameOver) { selected = null; legalMoves = []; }
+  selected = null; legalMoves = []; previewMode = false;
 
   const pauseBtn = document.getElementById('pauseBtn');
   if (pauseBtn) {
@@ -1120,7 +1118,7 @@ function checkShowGameEndOverlay() {
     document.getElementById('gameEndSub').textContent = winner !== null
       ? (mySeat === winner ? 'Congratulations!' : 'Better luck next time.')
       : 'No player has a legal move remaining.';
-    document.getElementById('playAgainBtn').classList.toggle('hidden', !isHost);
+    document.getElementById('playAgainBtn').classList.remove('hidden');
     overlay.classList.remove('hidden');
     gameEndShownFor = key;
   } else if (!gameOver) {
@@ -1326,8 +1324,7 @@ function enterRoom(code) {
   onDisconnect(disc).set(false).catch(() => {});
 }
 
-async function startGameAsHost() {
-  if (!roomCode || !isHost) return;
+async function writeFreshGameState() {
   const nn = roomConfig.n;
   const initState = {
     board: setupBoard(nn),
@@ -1341,14 +1338,29 @@ async function startGameAsHost() {
   await set(ref(db, `rooms/${roomCode}/state`), initState);
   await update(ref(db, `rooms/${roomCode}`), { status: 'playing' });
 }
+async function startGameAsHost() {
+  if (!roomCode || !isHost) return;
+  await writeFreshGameState();
+}
+async function playAgain() {
+  if (!roomCode) return;
+  await writeFreshGameState();
+}
 
 function leaveRoomLocal() {
+  if (roomUnsub) { roomUnsub(); roomUnsub = null; }
+  const uidAtLeave = myUid, codeAtLeave = roomCode;
+  if (codeAtLeave && uidAtLeave) {
+    set(ref(db, `rooms/${codeAtLeave}/players/${uidAtLeave}/connected`), false).catch(() => {});
+  }
   roomCode = null; roomConfig = null; mySeat = null; isSpectator = false; isHost = false;
   gameStarted = false; roomStatus = null; lastKnownStatus = null;
-  document.getElementById('roomWaitOverlay').classList.add('hidden');
+  gameOver = false; winner = null; selected = null; legalMoves = []; previewMode = false;
+  document.getElementById('roomWaitCard').classList.add('hidden');
   document.getElementById('gameEndOverlay').classList.add('hidden');
   document.getElementById('gameButtonsRow').classList.add('hidden');
   document.getElementById('lobbyOverlay').classList.remove('hidden');
+  clearLobbyError();
   renderRoomBar();
 }
 
@@ -1389,7 +1401,7 @@ document.getElementById('resignBtn').addEventListener('click', () => {
   showConfirm(`Resign as Player ${mySeat + 1}? This cannot be undone.`, () => resignPlayer(mySeat));
 });
 document.getElementById('playAgainBtn').addEventListener('click', () => {
-  if (isHost) startGameAsHost();
+  playAgain();
 });
 document.getElementById('backToRoomBtn').addEventListener('click', () => {
   document.getElementById('gameEndOverlay').classList.add('hidden');
