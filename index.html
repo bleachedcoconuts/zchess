@@ -137,10 +137,6 @@
   button#pauseBtn { background: #1c3d4a; color: var(--paper); border: 1px solid var(--teal); }
   button#pauseBtn:hover { filter: brightness(1.25); }
   button#pauseBtn.isPaused { background: #3d3a1c; border-color: #ababab; }
-  #resignBtn { background: #3d1c22; color: var(--paper); border: 1px solid var(--salmon); }
-  #resignBtn:hover { filter: brightness(1.25); }
-  #resignBtn.hidden { display: none; }
-  .gameButtonsRow.hidden { display: none; }
   button.ghostBtn {
     width: 100%; padding: 9px; margin-top: 8px;
     background: transparent; color: #7d8aa3; border: 1px solid #2a3350;
@@ -229,11 +225,6 @@
   .lobbyBox .row { margin-bottom: 14px; }
   .lobbyBox .row label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: #b8c2d8; }
   .lobbyBox .row input[type=range] { width: 100%; accent-color: var(--sky); }
-  .checkRow {
-    display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #b8c2d8;
-    margin-bottom: 12px; cursor: pointer;
-  }
-  .checkRow input[type=checkbox] { accent-color: var(--sky); width: 15px; height: 15px; flex-shrink: 0; }
   .lobbyPrimaryBtn, .lobbySecondaryBtn {
     width: 100%; padding: 11px; border-radius: 6px; font-size: 13.5px; font-weight: 700;
     cursor: pointer; letter-spacing: 0.3px; margin-top: 4px;
@@ -270,15 +261,6 @@
   .seatRow .name { color: #e8ecf4; font-weight: 600; }
   .seatRow.empty .name { color: #5a6580; font-style: italic; font-weight: 400; }
   .seatRow.me { border-color: var(--sky); }
-  .seatRow.clickable { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-  .seatRow.clickable:hover { border-color: var(--sky); background: #0d1424; }
-  .seatLeaveBtn {
-    background: transparent; border: 1px solid #2a3350; color: #7d8aa3; border-radius: 4px;
-    padding: 4px 9px; font-size: 11px; cursor: pointer; flex-shrink: 0; letter-spacing: 0.2px;
-  }
-  .seatLeaveBtn:hover { border-color: var(--salmon); color: var(--salmon); }
-  #setupCard #setupControls input:disabled,
-  #setupCard #setupControls input[type=range]:disabled { opacity: 0.5; cursor: not-allowed; }
   .youAreLabel { text-align: center; font-size: 12.5px; color: #b8c2d8; margin-bottom: 12px; }
   .waitHint { text-align: center; font-size: 12px; color: #5a6580; margin-top: 10px; }
   .gameEndTitle { font-size: 22px; font-weight: 700; color: #e8ecf4; text-align: center; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -293,8 +275,11 @@
     padding: 4px 9px; cursor: pointer; font-size: 12px;
   }
   .roomBar button:hover { border-color: var(--salmon); color: var(--salmon); }
-  #newGameBtn.hidden { display: none; }
+  #resignBtn { background: #3d1c22; color: var(--paper); border: 1px solid var(--salmon); }
+  #resignBtn:hover { filter: brightness(1.25); }
+  #resignBtn.hidden { display: none; }
   #setupCard.hidden { display: none; }
+  #newGameBtn.hidden { display: none; }
 </style>
 </head>
 <body>
@@ -322,35 +307,6 @@
     </div>
   </div>
   <div id="panel">
-    <div class="card hidden" id="roomWaitCard">
-      <div class="roomCodeDisplay"><span id="roomCodeText">-----</span> <button id="copyCodeBtn" type="button" title="Copy room code">⧉</button></div>
-      <div id="seatList" class="seatList"></div>
-      <div id="youAreLabel" class="youAreLabel"></div>
-      <button id="startGameBtn" class="lobbyPrimaryBtn hidden" type="button">Start Game</button>
-      <div id="waitHint" class="waitHint"></div>
-      <button id="leaveRoomBtn" class="lobbySecondaryBtn" type="button">Leave Room</button>
-    </div>
-    <div class="card hidden" id="setupCard">
-      <h2>Room Settings</h2>
-      <div id="setupControls">
-        <div class="row">
-          <label>Players <span class="val" id="aVal">4</span></label>
-          <input type="range" id="aSlider" min="3" max="8" step="1" value="4">
-          <div class="ticks"><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span></div>
-        </div>
-        <div class="numRow">
-          <span>Move timer (sec)</span>
-          <input type="number" id="moveTimerInput" min="5" max="600" step="5" value="30">
-        </div>
-        <div class="numRow">
-          <span>Total clock (min)</span>
-          <input type="number" id="totalClockInput" min="1" max="180" step="1" value="10">
-        </div>
-        <label class="checkRow"><input type="checkbox" id="zombieCheck" checked> Captured king's army joins the capturer</label>
-      </div>
-      <div id="setupLockedHint" class="waitHint hidden">Only the host can change these settings.</div>
-      <div id="setupSummary" class="setupSummary hidden"></div>
-    </div>
     <div class="card">
       <div id="statusBox" class="status-box">Loading…</div>
       <div class="circleTimerWrap">
@@ -365,12 +321,32 @@
         </div>
       </div>
       <div id="elimBox" class="elim"></div>
-      <button id="newGameBtn" class="hidden" type="button">New Game</button>
+      <button id="newGameBtn" class="hidden">New Game</button>
       <div class="gameButtonsRow hidden" id="gameButtonsRow">
-        <button id="abortBtn" type="button">Abort Game</button>
-        <button id="pauseBtn" type="button">Pause Game</button>
-        <button id="resignBtn" class="hidden" type="button">Resign</button>
+        <button id="abortBtn">Abort Game</button>
+        <button id="pauseBtn">Pause Game</button>
+        <button id="resignBtn" class="hidden">Resign</button>
       </div>
+    </div>
+
+    <div class="card hidden" id="setupCard">
+      <h2>Setup</h2>
+      <div id="setupControls">
+        <div class="row">
+          <label>Players <span class="val" id="aVal">4</span></label>
+          <input type="range" id="aSlider" min="3" max="8" step="1" value="4">
+          <div class="ticks"><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span></div>
+        </div>
+        <div class="numRow">
+          <span>Move timer (sec)</span>
+          <input type="number" id="moveTimerInput" min="5" max="600" step="5" value="30">
+        </div>
+        <div class="numRow">
+          <span>Total clock (min)</span>
+          <input type="number" id="totalClockInput" min="1" max="180" step="1" value="10">
+        </div>
+      </div>
+      <div id="setupSummary" class="setupSummary hidden"></div>
     </div>
 
     <div class="card">
@@ -388,9 +364,15 @@
       <button class="lobbyTabBtn" id="lobbyTabJoinBtn" type="button">Join Room</button>
     </div>
     <div id="lobbyCreateTab" class="lobbyTab">
+      <div class="row">
+        <label>Players <span class="val" id="lobbyAVal">4</span></label>
+        <input type="range" id="lobbyASlider" min="3" max="8" step="1" value="4">
+        <div class="ticks"><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span></div>
+      </div>
+      <div class="numRow"><span>Move timer (sec)</span><input type="number" id="lobbyMoveTimerInput" min="5" max="600" step="5" value="30"></div>
+      <div class="numRow"><span>Total clock (min)</span><input type="number" id="lobbyTotalClockInput" min="1" max="180" step="1" value="10"></div>
       <div class="numRow"><span>Your name</span><input type="text" id="lobbyNameInputCreate" maxlength="16" placeholder="Player"></div>
       <button id="lobbyCreateBtn" class="lobbyPrimaryBtn" type="button">Create Room</button>
-      <div class="lobbyStatus">Player count, timers, and other options can be set once you're in the room.</div>
     </div>
     <div id="lobbyJoinTab" class="lobbyTab hidden">
       <div class="numRow"><span>Room code</span><input type="text" id="lobbyCodeInput" maxlength="5" placeholder="ABCDE" style="text-transform:uppercase"></div>
@@ -399,6 +381,18 @@
     </div>
     <div id="lobbyError" class="lobbyError hidden"></div>
     <div id="lobbyStatus" class="lobbyStatus"></div>
+  </div>
+</div>
+
+<div class="fullOverlay hidden" id="roomWaitOverlay">
+  <div class="lobbyBox">
+    <div class="brand"><span class="mark">♞</span> Limaçon Chess</div>
+    <div class="roomCodeDisplay"><span id="roomCodeText">-----</span> <button id="copyCodeBtn" type="button" title="Copy room code">⧉</button></div>
+    <div id="seatList" class="seatList"></div>
+    <div id="youAreLabel" class="youAreLabel"></div>
+    <button id="startGameBtn" class="lobbyPrimaryBtn hidden" type="button">Start Game</button>
+    <div id="waitHint" class="waitHint"></div>
+    <button id="leaveRoomBtn" class="lobbySecondaryBtn" type="button">Leave Room</button>
   </div>
 </div>
 
@@ -454,20 +448,6 @@ let W = 800, H = 800;
 let boardPan = {x: null, y: null}; // screen-space translate origin; set on first resize
 let lastDrawnZoom = 1;
 let boardZoom = 1; // fixed zoom level — only changed via the "zoom to fit" button
-let boardViewRotation = 0; // extra rotation so each player's own side faces them
-
-// Recomputes boardViewRotation so that, in a multiplayer room, the local
-// player's home wedge/edge is rotated to sit at the bottom of their screen
-// (facing them), regardless of their seat number. Local hotseat play always
-// uses 0 (no rotation).
-function updateBoardViewRotation() {
-  if (roomCode && roomStatus === 'playing' && !isSpectator && mySeat !== null && n) {
-    const a = (2 * Math.PI) / n;
-    boardViewRotation = Math.PI - (mySeat + 1.5) * a;
-  } else {
-    boardViewRotation = 0;
-  }
-}
 
 // World-space half-extent of the board's outer boundary, used to compute a
 // zoom level that fits the whole board inside the canvas.
@@ -845,7 +825,6 @@ let activePlayers = Array.from({length:n}, (_,i)=>i);
 let turn = 0;
 let selected = null, legalMoves = [], gameOver = false, winner = null, message = '', lastMoveHighlight = null;
 let gameStarted = false, paused = false, pauseStartTs = null;
-let zombieChess = true; // when a king is captured, do the eliminated player's remaining pieces defect to the capturer, or vanish?
 
 // ── Chess clocks: configurable per-move limit, overage eats into a bank ────
 let MOVE_LIMIT_MS = 30 * 1000;
@@ -904,33 +883,6 @@ function handleTimeout(p) {
 }
 function resignPlayer(p) {
   eliminatePlayer(p, `Player ${p + 1} resigned.`);
-}
-function togglePause() {
-  if (!gameStarted || gameOver) return;
-  if (roomCode && (isSpectator || mySeat === null || !activePlayers.includes(mySeat))) return;
-  const btn = document.getElementById('pauseBtn');
-  if (!paused) {
-    paused = true;
-    pauseStartTs = Date.now();
-    btn.textContent = 'Resume Game';
-    btn.classList.add('isPaused');
-  } else {
-    const delta = Date.now() - pauseStartTs;
-    moveStartTs += delta;
-    paused = false;
-    pauseStartTs = null;
-    btn.textContent = 'Pause Game';
-    btn.classList.remove('isPaused');
-  }
-  updateStatusPanel();
-  draw();
-  if (roomCode) pushLocalStateToRoom();
-}
-function abortGame() {
-  if (!roomCode || !isHost) return;
-  showConfirm('Abort the current game and send everyone back to the room lobby?', async () => {
-    await update(ref(db, `rooms/${roomCode}`), { status: 'lobby' });
-  });
 }
 function tickClock() {
   if (!gameStarted) return;
@@ -998,16 +950,8 @@ function executeMove(fromKey, toCell, meta) {
 
   if (eliminated !== null) {
     activePlayers = activePlayers.filter(p => p !== eliminated);
-    if (zombieChess) {
-      // Zombie chess: the eliminated player's surviving army defects to
-      // whoever captured their king, instead of vanishing.
-      for (const k in board) if (board[k].player === eliminated) board[k].player = mover;
-      message = `Player ${eliminated+1} eliminated! Player ${mover+1} claims their army.`;
-    } else {
-      // Classic: the eliminated player's remaining pieces are simply removed.
-      for (const k in board) if (board[k].player === eliminated) delete board[k];
-      message = `Player ${eliminated+1} eliminated!`;
-    }
+    for (const k in board) if (board[k].player === eliminated) delete board[k];
+    message = `Player ${eliminated+1} eliminated!`;
   } else {
     message = '';
   }
@@ -1041,13 +985,75 @@ function previewSetup(nn) {
 }
 
 function setupSummaryText() {
-  return `<b>${n}</b> players · <b>${Math.round(MOVE_LIMIT_MS/1000)}s</b>/move · <b>${Math.round(MAIN_CLOCK_MS/60000)}:00</b> clock · <b>${zombieChess ? 'zombie' : 'classic'}</b> captures`;
+  return `<b>${n}</b> players · <b>${Math.round(MOVE_LIMIT_MS/1000)}s</b>/move · <b>${Math.round(MAIN_CLOCK_MS/60000)}:00</b> clock`;
+}
+
+function startNewGameFromSetup() {
+  const nn = parseInt(aSlider.value, 10);
+  const moveSec = Math.max(1, parseInt(moveTimerInput.value, 10) || 30);
+  const clockMin = Math.max(1, parseInt(totalClockInput.value, 10) || 10);
+  MOVE_LIMIT_MS = moveSec * 1000;
+  MAIN_CLOCK_MS = clockMin * 60 * 1000;
+  gameStarted = true;
+  newGame(nn);
+  document.getElementById('newGameBtn').classList.add('hidden');
+  document.getElementById('gameButtonsRow').classList.remove('hidden');
+  document.getElementById('setupControls').classList.add('hidden');
+  const summaryEl = document.getElementById('setupSummary');
+  summaryEl.innerHTML = setupSummaryText();
+  summaryEl.classList.remove('hidden');
+  updateStatusPanel();
+}
+
+function abortGame() {
+  if (roomCode) {
+    if (!isHost) return;
+    showConfirm('Abort the current game and send everyone back to the room lobby?', async () => {
+      await update(ref(db, `rooms/${roomCode}`), { status: 'lobby' });
+    });
+    return;
+  }
+  showConfirm('Abort the current game and return to setup? This cannot be undone.', () => {
+    gameStarted = false;
+    gameOver = true;
+    paused = false; pauseStartTs = null;
+    message = '';
+    document.getElementById('newGameBtn').classList.remove('hidden');
+    document.getElementById('gameButtonsRow').classList.add('hidden');
+    document.getElementById('setupControls').classList.remove('hidden');
+    document.getElementById('setupSummary').classList.add('hidden');
+    document.getElementById('pauseBtn').textContent = 'Pause Game';
+    document.getElementById('pauseBtn').classList.remove('isPaused');
+    previewSetup(parseInt(aSlider.value, 10));
+    updateStatusPanel();
+  });
+}
+
+function togglePause() {
+  if (!gameStarted || gameOver) return;
+  if (roomCode && (isSpectator || mySeat === null || !activePlayers.includes(mySeat))) return;
+  const btn = document.getElementById('pauseBtn');
+  if (!paused) {
+    paused = true;
+    pauseStartTs = Date.now();
+    btn.textContent = 'Resume Game';
+    btn.classList.add('isPaused');
+  } else {
+    const delta = Date.now() - pauseStartTs;
+    moveStartTs += delta;
+    paused = false;
+    pauseStartTs = null;
+    btn.textContent = 'Pause Game';
+    btn.classList.remove('isPaused');
+  }
+  updateStatusPanel();
+  draw();
+  if (roomCode) pushLocalStateToRoom();
 }
 
 // ── Multiplayer (Firebase) ──────────────────────────────────────────────
 let myUid = null;
 let roomCode = null;
-let roomUnsub = null;      // unsubscribe fn for the active Firebase room listener
 let roomConfig = null;      // {n, moveLimitMs, mainClockMs}
 let roomSeats = {};         // {"0": uid, "1": uid, ...}
 let roomPlayers = {};       // {uid: {name, seat}}
@@ -1092,14 +1098,12 @@ function applyRemoteState(state) {
   message = state.message || '';
   lastMoveHighlight = state.lastMoveHighlight || null;
   if (turn !== mySeat || gameOver) { selected = null; legalMoves = []; }
-  previewMode = false;
 
   const pauseBtn = document.getElementById('pauseBtn');
   if (pauseBtn) {
     pauseBtn.textContent = paused ? 'Resume Game' : 'Pause Game';
     pauseBtn.classList.toggle('isPaused', paused);
   }
-
   draw();
   updateStatusPanel();
   checkShowGameEndOverlay();
@@ -1125,111 +1129,39 @@ function checkShowGameEndOverlay() {
   }
 }
 
-async function claimSeat(seatIndex) {
-  if (!roomCode || roomStatus !== 'lobby') return;
-  if (roomSeats[seatIndex]) return; // someone beat you to it
-  const updates = {};
-  if (mySeat !== null) updates[`seats/${mySeat}`] = null;
-  updates[`seats/${seatIndex}`] = myUid;
-  updates[`players/${myUid}/seat`] = seatIndex;
-  await update(ref(db, `rooms/${roomCode}`), updates).catch(() => {});
-}
-
-async function leaveSeat() {
-  if (!roomCode || mySeat === null || roomStatus !== 'lobby') return;
-  const updates = {};
-  updates[`seats/${mySeat}`] = null;
-  updates[`players/${myUid}/seat`] = -1;
-  await update(ref(db, `rooms/${roomCode}`), updates).catch(() => {});
-}
-
 function renderSeatList() {
   const nn = (roomConfig && roomConfig.n) || n;
   const listEl = document.getElementById('seatList');
   if (!listEl) return;
-  const canPick = roomStatus === 'lobby';
   let html = '';
   for (let s = 0; s < nn; s++) {
     const uid = roomSeats[s];
     const p = uid ? roomPlayers[uid] : null;
     const mine = uid && uid === myUid;
     const color = playerColor(s, nn);
-    const clickable = canPick && !p && !mine;
-    html += `<div class="seatRow ${p ? '' : 'empty'} ${mine ? 'me' : ''} ${clickable ? 'clickable' : ''}" data-seat="${s}">
+    html += `<div class="seatRow ${p ? '' : 'empty'} ${mine ? 'me' : ''}">
       <span class="who"><span class="dot" style="background:${color}"></span>Player ${s + 1}</span>
-      <span class="name">${p ? (p.name || 'Player') + (mine ? ' (you)' : '') : (canPick ? 'Tap to sit here' : 'Empty seat')}</span>
-      ${mine && canPick ? '<button type="button" class="seatLeaveBtn" data-leave="1">Spectate</button>' : ''}
+      <span class="name">${p ? (p.name || 'Player') + (mine ? ' (you)' : '') : 'Empty seat'}</span>
     </div>`;
   }
   listEl.innerHTML = html;
 
-  if (canPick) {
-    listEl.querySelectorAll('.seatRow').forEach((row) => {
-      const s = parseInt(row.dataset.seat, 10);
-      const leaveBtn = row.querySelector('[data-leave]');
-      if (leaveBtn) {
-        leaveBtn.addEventListener('click', (e) => { e.stopPropagation(); leaveSeat(); });
-      } else if (row.classList.contains('clickable')) {
-        row.addEventListener('click', () => claimSeat(s));
-      }
-    });
-  }
-
   const seatedCount = Object.keys(roomSeats).length;
   const youAre = document.getElementById('youAreLabel');
-  if (isSpectator) youAre.textContent = canPick ? `You're spectating — tap an empty seat to play.` : `You're spectating this room.`;
+  if (isSpectator) youAre.textContent = `You're spectating this room (seats full).`;
   else if (mySeat !== null) youAre.textContent = `You're Player ${mySeat + 1}.`;
   else youAre.textContent = '';
 
   const startBtn = document.getElementById('startGameBtn');
   const hint = document.getElementById('waitHint');
-  const MIN_TO_START = 2;
   if (isHost) {
     startBtn.classList.remove('hidden');
-    startBtn.disabled = seatedCount < MIN_TO_START;
-    if (seatedCount < MIN_TO_START) {
-      hint.textContent = `Need at least ${MIN_TO_START} seated players to start (${seatedCount}/${nn})…`;
-    } else if (seatedCount < nn) {
-      hint.textContent = `${seatedCount}/${nn} seated — you can start now, or wait for more players.`;
-    } else {
-      hint.textContent = 'All seats full — start whenever you\'re ready.';
-    }
+    startBtn.disabled = seatedCount < nn;
+    hint.textContent = seatedCount < nn ? `Waiting for players (${seatedCount}/${nn})…` : 'All seats full — start whenever you\'re ready.';
   } else {
     startBtn.classList.add('hidden');
     hint.textContent = `Waiting for the host to start (${seatedCount}/${nn} seated)…`;
   }
-}
-
-// ── Room Settings card (host-editable, shown while in the room lobby) ──
-function pushRoomConfigUpdate(patch) {
-  if (!roomCode || !isHost) return;
-  update(ref(db, `rooms/${roomCode}/config`), patch).catch(() => {});
-}
-
-function renderRoomSettingsCard() {
-  if (!roomConfig) return;
-  const nn = roomConfig.n;
-  const aSliderEl = document.getElementById('aSlider');
-  const aValEl = document.getElementById('aVal');
-  const moveEl = document.getElementById('moveTimerInput');
-  const clockEl = document.getElementById('totalClockInput');
-  const zombieEl = document.getElementById('zombieCheck');
-
-  aSliderEl.value = nn;
-  aValEl.textContent = nn;
-  moveEl.value = Math.round(roomConfig.moveLimitMs / 1000);
-  clockEl.value = Math.round(roomConfig.mainClockMs / 60000);
-  zombieEl.checked = roomConfig.zombieChess !== false;
-
-  // Keep the static preview board in sync with the current player count.
-  if (n !== nn) previewSetup(nn);
-
-  const locked = !isHost;
-  aSliderEl.disabled = locked;
-  moveEl.disabled = locked;
-  clockEl.disabled = locked;
-  zombieEl.disabled = locked;
-  document.getElementById('setupLockedHint').classList.toggle('hidden', isHost);
 }
 
 function renderRoomBar() {
@@ -1243,9 +1175,10 @@ function renderRoomBar() {
 
 function renderRoomUI(room) {
   const lobbyOverlay = document.getElementById('lobbyOverlay');
-  const waitOverlay = document.getElementById('roomWaitCard');
+  const waitOverlay = document.getElementById('roomWaitOverlay');
   const endOverlay = document.getElementById('gameEndOverlay');
-  const newGameBtnEl = document.getElementById('newGameBtn');
+  const resignBtn = document.getElementById('resignBtn');
+  const abortBtn = document.getElementById('abortBtn');
 
   lobbyOverlay.classList.add('hidden');
   renderRoomBar();
@@ -1254,30 +1187,25 @@ function renderRoomUI(room) {
     gameStarted = false;
     endOverlay.classList.add('hidden');
     waitOverlay.classList.remove('hidden');
-    document.getElementById('setupCard').classList.remove('hidden');
-    newGameBtnEl.classList.add('hidden');
     document.getElementById('gameButtonsRow').classList.add('hidden');
     renderSeatList();
-    renderRoomSettingsCard();
   } else if (room.status === 'playing') {
     waitOverlay.classList.add('hidden');
-    document.getElementById('setupCard').classList.add('hidden');
     if (lastKnownStatus !== 'playing') {
       // Fresh transition into a game: size the board for this room's player count.
       n = roomConfig.n;
       MOVE_LIMIT_MS = roomConfig.moveLimitMs;
       MAIN_CLOCK_MS = roomConfig.mainClockMs;
       gameStarted = true;
+      document.getElementById('gameButtonsRow').classList.remove('hidden');
       const summaryEl = document.getElementById('setupSummary');
       if (summaryEl) summaryEl.classList.add('hidden');
       setTimeout(zoomToFit, 0);
     }
     gameStarted = true;
-    newGameBtnEl.classList.toggle('hidden', !isHost);
-    document.getElementById('gameButtonsRow').classList.remove('hidden');
-    document.getElementById('abortBtn').classList.toggle('hidden', !isHost);
+    abortBtn.classList.toggle('hidden', !isHost);
     const canResign = !isSpectator && mySeat !== null && !gameOver && activePlayers.includes(mySeat);
-    document.getElementById('resignBtn').classList.toggle('hidden', !canResign);
+    resignBtn.classList.toggle('hidden', !canResign);
   }
   lastKnownStatus = room.status;
 }
@@ -1295,7 +1223,7 @@ function computeMyRole(room) {
 }
 
 function listenRoom(code) {
-  roomUnsub = onValue(ref(db, `rooms/${code}`), (snap) => {
+  onValue(ref(db, `rooms/${code}`), (snap) => {
     const room = snap.val();
     if (!room) {
       // Room no longer exists — send everyone back to the entry lobby.
@@ -1304,7 +1232,6 @@ function listenRoom(code) {
       return;
     }
     roomConfig = room.config || roomConfig;
-    if (roomConfig) zombieChess = roomConfig.zombieChess !== false;
     computeMyRole(room);
     if (room.state) applyRemoteState(room.state);
     roomStatus = room.status;
@@ -1337,11 +1264,12 @@ async function createRoom() {
   clearLobbyError();
   try {
     await ensureSignedIn();
+    const nn = parseInt(document.getElementById('lobbyASlider').value, 10);
+    const moveSec = Math.max(1, parseInt(document.getElementById('lobbyMoveTimerInput').value, 10) || 30);
+    const clockMin = Math.max(1, parseInt(document.getElementById('lobbyTotalClockInput').value, 10) || 10);
     const name = (document.getElementById('lobbyNameInputCreate').value || 'Player 1').trim().slice(0, 16) || 'Player 1';
     const code = makeRoomCode();
-    // Sensible defaults — the host can adjust player count, timers, and
-    // captures rule from the Room Settings card once inside the room.
-    const config = { n: 4, moveLimitMs: 30 * 1000, mainClockMs: 10 * 60 * 1000, zombieChess: true };
+    const config = { n: nn, moveLimitMs: moveSec * 1000, mainClockMs: clockMin * 60 * 1000 };
     await set(ref(db, `rooms/${code}`), {
       hostUid: myUid,
       status: 'lobby',
@@ -1368,16 +1296,20 @@ async function joinRoom() {
     if (!snap.exists()) { showLobbyError('No room found with that code.'); return; }
     const room = snap.val();
 
-    // Rejoining a room you're already part of (seated or spectating).
+    // Rejoining a room you already have a seat in.
     const existingSeats = room.seats || {};
     for (const s in existingSeats) {
       if (existingSeats[s] === myUid) { enterRoom(code); return; }
     }
-    const existingPlayers = room.players || {};
-    if (existingPlayers[myUid]) { enterRoom(code); return; }
 
-    // New joiners land as spectators and pick their own seat in the room.
-    await update(roomRef, { [`players/${myUid}`]: { name, seat: -1 } });
+    const nn = room.config.n;
+    const takenCount = Object.keys(existingSeats).length;
+    const updates = {};
+    updates[`players/${myUid}`] = { name, seat: takenCount < nn ? takenCount : -1 };
+    if (takenCount < nn) {
+      updates[`seats/${takenCount}`] = myUid;
+    }
+    await update(roomRef, updates);
     enterRoom(code);
   } catch (err) {
     showLobbyError('Could not join room: ' + err.message);
@@ -1394,22 +1326,13 @@ function enterRoom(code) {
   onDisconnect(disc).set(false).catch(() => {});
 }
 
-async function writeFreshGameState() {
+async function startGameAsHost() {
+  if (!roomCode || !isHost) return;
   const nn = roomConfig.n;
-  // Seats left empty at start time don't get a turn — a human has to be
-  // sitting there to play it, otherwise the game would just hang forever
-  // waiting on a seat nobody can click for. Their starting pieces are
-  // dropped from the board immediately, same as an elimination.
-  const seatedSet = new Set(Object.keys(roomSeats || {}).map((s) => parseInt(s, 10)));
-  const board = setupBoard(nn);
-  for (const k in board) {
-    if (!seatedSet.has(board[k].player)) delete board[k];
-  }
-  const activePlayers = Array.from({ length: nn }, (_, i) => i).filter((i) => seatedSet.has(i));
   const initState = {
-    board,
-    activePlayers,
-    turn: activePlayers[0] ?? 0,
+    board: setupBoard(nn),
+    activePlayers: Array.from({ length: nn }, (_, i) => i),
+    turn: 0,
     clocks: Array.from({ length: nn }, () => roomConfig.mainClockMs),
     moveStartTs: Date.now(),
     paused: false, pauseStartTs: null,
@@ -1418,70 +1341,22 @@ async function writeFreshGameState() {
   await set(ref(db, `rooms/${roomCode}/state`), initState);
   await update(ref(db, `rooms/${roomCode}`), { status: 'playing' });
 }
-async function startGameAsHost() {
-  if (!roomCode || !isHost) return;
-  await writeFreshGameState();
-}
-async function playAgain() {
-  if (!roomCode || !isHost) return;
-  await writeFreshGameState();
-}
-
-// Deletes a room outright once nobody is left connected in it, so rooms
-// don't pile up in Firebase after everyone's tab is closed or they've left.
-async function cleanupRoomIfEmpty(code, excludeUid) {
-  try {
-    const snap = await get(ref(db, `rooms/${code}/players`));
-    const players = snap.val() || {};
-    const stillHere = Object.keys(players).some(
-      (uid) => uid !== excludeUid && players[uid] && players[uid].connected !== false
-    );
-    if (!stillHere) await remove(ref(db, `rooms/${code}`));
-  } catch (e) {}
-}
-
-// Best-effort garbage collection for rooms abandoned by a closed tab (where
-// no explicit "Leave Room" click ever fires): on load, sweep for rooms where
-// every player shows connected:false and delete them. New rooms get a grace
-// period so this can't race a room that's still being set up.
-async function sweepStaleRooms() {
-  try {
-    const snap = await get(ref(db, 'rooms'));
-    const rooms = snap.val();
-    if (!rooms) return;
-    const now = Date.now();
-    for (const code in rooms) {
-      const room = rooms[code];
-      if (!room || !room.createdAt || now - room.createdAt < 60000) continue;
-      const players = room.players || {};
-      const uids = Object.keys(players);
-      const allDisconnected = uids.length === 0 || uids.every((uid) => players[uid] && players[uid].connected === false);
-      if (allDisconnected) remove(ref(db, `rooms/${code}`)).catch(() => {});
-    }
-  } catch (e) {}
-}
 
 function leaveRoomLocal() {
-  if (roomUnsub) { roomUnsub(); roomUnsub = null; }
-  const uidAtLeave = myUid, codeAtLeave = roomCode;
-  if (codeAtLeave && uidAtLeave) {
-    set(ref(db, `rooms/${codeAtLeave}/players/${uidAtLeave}/connected`), false).catch(() => {});
-    cleanupRoomIfEmpty(codeAtLeave, uidAtLeave);
-  }
   roomCode = null; roomConfig = null; mySeat = null; isSpectator = false; isHost = false;
   gameStarted = false; roomStatus = null; lastKnownStatus = null;
-  gameOver = false; winner = null; selected = null; legalMoves = []; previewMode = false;
-  document.getElementById('roomWaitCard').classList.add('hidden');
-  document.getElementById('setupCard').classList.add('hidden');
+  document.getElementById('roomWaitOverlay').classList.add('hidden');
   document.getElementById('gameEndOverlay').classList.add('hidden');
-  document.getElementById('newGameBtn').classList.add('hidden');
   document.getElementById('gameButtonsRow').classList.add('hidden');
   document.getElementById('lobbyOverlay').classList.remove('hidden');
-  clearLobbyError();
   renderRoomBar();
 }
 
 // ── Wire up lobby / room / end-screen UI ────────────────────────────────
+const lobbyASlider = document.getElementById('lobbyASlider');
+const lobbyAVal = document.getElementById('lobbyAVal');
+lobbyASlider.addEventListener('input', () => { lobbyAVal.textContent = lobbyASlider.value; });
+
 document.getElementById('lobbyTabCreateBtn').addEventListener('click', () => {
   document.getElementById('lobbyTabCreateBtn').classList.add('active');
   document.getElementById('lobbyTabJoinBtn').classList.remove('active');
@@ -1509,8 +1384,12 @@ document.getElementById('leaveRoomBtn').addEventListener('click', () => {
 document.getElementById('topLeaveBtn').addEventListener('click', () => {
   showConfirm('Leave this room? You can rejoin later with the room code.', () => leaveRoomLocal());
 });
+document.getElementById('resignBtn').addEventListener('click', () => {
+  if (mySeat === null || !activePlayers.includes(mySeat) || gameOver) return;
+  showConfirm(`Resign as Player ${mySeat + 1}? This cannot be undone.`, () => resignPlayer(mySeat));
+});
 document.getElementById('playAgainBtn').addEventListener('click', () => {
-  playAgain();
+  if (isHost) startGameAsHost();
 });
 document.getElementById('backToRoomBtn').addEventListener('click', () => {
   document.getElementById('gameEndOverlay').classList.add('hidden');
@@ -1620,9 +1499,8 @@ function updateBoardClocks() {
     const gap = eg.cellW * 0.85;
     const wx = eg.originX + 4 * eg.cellW * eg.ux + (2 * eg.cellW + gap) * eg.nx;
     const wy = eg.originY + 4 * eg.cellH * eg.uy + (2 * eg.cellH + gap) * eg.ny;
-    const [rwx, rwy] = rotPt(wx, wy, boardViewRotation);
-    const sx = boardPan.x + rwx * scale;
-    const sy = boardPan.y - rwy * scale;
+    const sx = boardPan.x + wx * scale;
+    const sy = boardPan.y - wy * scale;
     el.style.left = sx + 'px';
     el.style.top = sy + 'px';
     el.style.width = sizePx + 'px';
@@ -1705,14 +1583,12 @@ function draw() {
   aVal.textContent = n;
   const a = (2 * Math.PI) / n;
   const zoom = boardZoom;
-  updateBoardViewRotation();
 
   ctx.clearRect(0, 0, W, H);
   ctx.save();
   ctx.translate(boardPan.x, boardPan.y);
   const scale = (W / 5) * zoom;
   ctx.scale(scale, -scale);
-  ctx.rotate(boardViewRotation);
   lastDrawnZoom = zoom;
 
   const rList = [0,1,2,3,4,5,6,7,8];
@@ -1940,8 +1816,7 @@ function draw() {
     const info = board[key];
     const g = cellGeoOfGlobal(keyToCell(key));
     if (!g) continue;
-    const [rcx, rcy] = rotPt(g.cx, g.cy, boardViewRotation);
-    const sx = boardPan.x + rcx*scale, sy = boardPan.y - rcy*scale;
+    const sx = boardPan.x + g.cx*scale, sy = boardPan.y - g.cy*scale;
     const side = Math.hypot(g.pts[1][0]-g.pts[0][0], g.pts[1][1]-g.pts[0][1]);
     const r = Math.max(4, side*scale*0.42);
     ctx.font = `${r*1.7}px serif`;
@@ -1999,11 +1874,7 @@ function handleCanvasTap(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   const mx = clientX-rect.left, my = clientY-rect.top;
   const scale = (W/5)*boardZoom;
-  const wx0 = (mx-boardPan.x)/scale, wy0 = -(my-boardPan.y)/scale;
-  // lastWedgeCells/lastCellGeo are stored in unrotated world space, but the
-  // board is visually rotated by boardViewRotation for this player, so undo
-  // that rotation on the tap point before hit-testing against them.
-  const [wx, wy] = rotPt(wx0, wy0, -boardViewRotation);
+  const wx = (mx-boardPan.x)/scale, wy = -(my-boardPan.y)/scale;
 
   let clicked = null;
   for (const key in lastWedgeCells) {
@@ -2112,53 +1983,14 @@ canvas.addEventListener('touchend', (ev) => {
   }
 }, {passive:false});
 
-document.getElementById('newGameBtn').addEventListener('click', () => {
-  if (!roomCode || !isHost) return;
-  showConfirm('Start a new game with the same room settings? This ends the current game for everyone.', () => playAgain());
-});
+document.getElementById('newGameBtn').addEventListener('click', startNewGameFromSetup);
 document.getElementById('abortBtn').addEventListener('click', abortGame);
 document.getElementById('pauseBtn').addEventListener('click', togglePause);
-document.getElementById('resignBtn').addEventListener('click', () => {
-  if (mySeat === null || !activePlayers.includes(mySeat) || gameOver) return;
-  showConfirm(`Resign as Player ${mySeat + 1}? This cannot be undone.`, () => resignPlayer(mySeat));
-});
 document.getElementById('fitBtn').addEventListener('click', zoomToFit);
 
 aSlider.addEventListener('input', () => {
   if (gameStarted) return;
   previewSetup(parseInt(aSlider.value, 10));
-});
-
-// In-room: the host's edits to player count / timers / captures rule sync
-// live to everyone else in the room via the config node.
-aSlider.addEventListener('change', () => {
-  if (!roomCode || !isHost || roomStatus !== 'lobby') return;
-  const nn = parseInt(aSlider.value, 10);
-  pushRoomConfigUpdate({ n: nn });
-  // Vacate any seats that no longer exist at the new player count.
-  const seatUpdates = {};
-  for (const s in roomSeats) {
-    if (parseInt(s, 10) >= nn) {
-      const uid = roomSeats[s];
-      seatUpdates[`seats/${s}`] = null;
-      if (uid) seatUpdates[`players/${uid}/seat`] = -1;
-    }
-  }
-  if (Object.keys(seatUpdates).length) update(ref(db, `rooms/${roomCode}`), seatUpdates).catch(() => {});
-});
-moveTimerInput.addEventListener('change', () => {
-  if (!roomCode || !isHost || roomStatus !== 'lobby') return;
-  const sec = Math.max(1, parseInt(moveTimerInput.value, 10) || 30);
-  pushRoomConfigUpdate({ moveLimitMs: sec * 1000 });
-});
-totalClockInput.addEventListener('change', () => {
-  if (!roomCode || !isHost || roomStatus !== 'lobby') return;
-  const min = Math.max(1, parseInt(totalClockInput.value, 10) || 10);
-  pushRoomConfigUpdate({ mainClockMs: min * 60 * 1000 });
-});
-document.getElementById('zombieCheck').addEventListener('change', (e) => {
-  if (!roomCode || !isHost || roomStatus !== 'lobby') return;
-  pushRoomConfigUpdate({ zombieChess: e.target.checked });
 });
 
 function resizeCanvas() {
@@ -2184,10 +2016,6 @@ resizeCanvas();
 
 updateStatusPanel();
 setInterval(tickClock, 250);
-
-// Sign in immediately (rather than waiting for a Create/Join click) so we
-// can sweep out rooms left behind by closed tabs as soon as the page loads.
-ensureSignedIn().then(sweepStaleRooms).catch(() => {});
 </script>
 </body>
 </html>
