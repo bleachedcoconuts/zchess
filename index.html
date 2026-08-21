@@ -489,7 +489,7 @@ function computeViewRotation(nn) {
   if (!gameStarted) return 0;
   const seat = currentViewSeat();
   const a = (2 * Math.PI) / nn;
-  return (seat + 0.5) * a - Math.PI;
+  return (seat + 1) * a - Math.PI;
 }
 
 // World-space half-extent of the board's outer boundary, used to compute a
@@ -512,14 +512,22 @@ function boardZoomToFit(nn) {
   // The on-board clock rings sit just past each player's back rank, outside
   // the board's own boundary — pad the fit radius so they land inside the
   // window instead of getting clipped by canvasWrap's overflow.
-  const a = (2 * Math.PI) / nn;
-  const approxCellW = (2 * half * Math.sin(a / 2)) / 10;
-  const clockMargin = 2.85 * approxCellW + 0.16;
+  const clockMargin = clockRingOffset(nn) + 0.16;
   const paddedHalf = half + clockMargin;
   const pxPerWorld = (Math.min(W, H) * 0.94) / (2 * paddedHalf);
   return clampZoom(pxPerWorld / (W / 5));
 }
 function clampZoom(z) { return Math.max(0.15, Math.min(4, z)); }
+// World-space distance from an edge's back rail (row 0) to its clock ring
+// center, measured along the edge's outward normal. This used to be a fixed
+// multiple of the per-edge cell width, but cell width shrinks as n grows
+// (more, shorter edges around the same board), which pulled the rings in
+// tight against the board at higher player counts. It now grows gently and
+// linearly with n instead, anchored so n=4 (which read correctly) keeps its
+// original spacing.
+function clockRingOffset(nn) {
+  return 0.806 + 0.045 * (nn - 4);
+}
 function zoomToFit() {
   boardZoom = boardZoomToFit(n);
   boardPan.x = W / 2; boardPan.y = H / 2;
@@ -861,6 +869,17 @@ function playerColor(p, nn) {
   const hue = Math.round((p / nn) * 360);
   return `hsl(${hue},100%,62%)`;
 }
+// In a room, prefer the seated player's chosen display name over the
+// generic "Player N" — falls back to "Player N" for local pass-and-play,
+// empty seats, or missing names.
+function playerLabel(p) {
+  if (roomCode) {
+    const uid = roomSeats[p];
+    const info = uid ? roomPlayers[uid] : null;
+    if (info && info.name) return info.name;
+  }
+  return `Player ${p + 1}`;
+}
 
 let n = parseInt(document.getElementById('aSlider').value, 10);
 let board = setupBoard(n);
@@ -923,10 +942,10 @@ function eliminatePlayer(p, reasonMsg) {
   checkShowGameEndOverlay();
 }
 function handleTimeout(p) {
-  eliminatePlayer(p, `Player ${p + 1} ran out of time!`);
+  eliminatePlayer(p, `${playerLabel(p)} ran out of time!`);
 }
 function resignPlayer(p) {
-  eliminatePlayer(p, `Player ${p + 1} resigned.`);
+  eliminatePlayer(p, `${playerLabel(p)} resigned.`);
 }
 function tickClock() {
   if (!gameStarted) return;
@@ -1000,10 +1019,10 @@ function executeMove(fromKey, toCell, meta) {
       for (const k in board) {
         if (board[k].player === eliminated) board[k] = {...board[k], player: mover};
       }
-      message = `Player ${eliminated+1} eliminated — their pieces defect to Player ${mover+1}!`;
+      message = `${playerLabel(eliminated)} eliminated — their pieces defect to ${playerLabel(mover)}!`;
     } else {
       for (const k in board) if (board[k].player === eliminated) delete board[k];
-      message = `Player ${eliminated+1} eliminated!`;
+      message = `${playerLabel(eliminated)} eliminated!`;
     }
   } else {
     message = '';
@@ -1197,7 +1216,7 @@ function checkShowGameEndOverlay() {
   if (gameOver && roomCode) {
     const key = roomCode + ':' + (winner ?? 'draw') + ':' + activePlayers.length;
     document.getElementById('gameEndTitle').innerHTML = winner !== null
-      ? `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${playerColor(winner, n)}"></span>Player ${winner + 1} wins!`
+      ? `<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${playerColor(winner, n)}"></span>${playerLabel(winner)} wins!`
       : 'Game over — no winner';
     document.getElementById('gameEndSub').textContent = winner !== null
       ? (mySeat === winner ? 'Congratulations!' : 'Better luck next time.')
@@ -1618,7 +1637,7 @@ document.getElementById('topLeaveBtn').addEventListener('click', () => {
 });
 document.getElementById('resignBtn').addEventListener('click', () => {
   if (mySeat === null || !activePlayers.includes(mySeat) || gameOver) return;
-  showConfirm(`Resign as Player ${mySeat + 1}? This cannot be undone.`, () => resignPlayer(mySeat));
+  showConfirm(`Resign as ${playerLabel(mySeat)}? This cannot be undone.`, () => resignPlayer(mySeat));
 });
 document.getElementById('playAgainBtn').addEventListener('click', () => {
   if (isHost) startGameAsHost();
@@ -1654,21 +1673,21 @@ function updateStatusPanel() {
     statusBox.innerHTML = 'Configure your game, then press <b>New Game</b>.';
   } else if (gameOver) {
     statusBox.innerHTML = winner !== null
-      ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${playerColor(winner,n)};margin-right:6px;vertical-align:middle"></span><b>Player ${winner+1} wins!</b>`
+      ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${playerColor(winner,n)};margin-right:6px;vertical-align:middle"></span><b>${playerLabel(winner)} wins!</b>`
       : 'Game over — no legal moves for anyone.';
   } else if (paused) {
     statusBox.innerHTML =
-      `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${playerColor(turn,n)};margin-right:6px;vertical-align:middle"></span>Player ${turn+1}'s turn — <b>Paused</b>`;
+      `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${playerColor(turn,n)};margin-right:6px;vertical-align:middle"></span>${playerLabel(turn)}'s turn — <b>Paused</b>`;
   } else {
     const turnUid = roomCode ? roomSeats[turn] : null;
     const turnDisc = roomCode && turnUid && !seatIsConnected(turnUid);
     statusBox.innerHTML =
-      `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${playerColor(turn,n)};margin-right:6px;vertical-align:middle"></span>Player ${turn+1}'s turn` +
+      `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${playerColor(turn,n)};margin-right:6px;vertical-align:middle"></span>${playerLabel(turn)}'s turn` +
       (turnDisc ? ` <span class="discTag">Disconnected</span>` : '') +
       (message ? ` — ${message}` : '');
   }
   elimBox.textContent = activePlayers.length < n
-    ? `Eliminated: ${Array.from({length:n},(_,i)=>i).filter(p=>!activePlayers.includes(p)).map(p=>p+1).join(', ')}`
+    ? `Eliminated: ${Array.from({length:n},(_,i)=>i).filter(p=>!activePlayers.includes(p)).map(p=>playerLabel(p)).join(', ')}`
     : '';
 
   const headerInfo = document.getElementById('clocksHeaderInfo');
@@ -1731,9 +1750,9 @@ function updateBoardClocks() {
     if (!eg) { el.style.display = 'none'; continue; }
     el.style.display = 'block';
 
-    const gap = eg.cellW * 0.85;
-    const wx = eg.originX + 4 * eg.cellW * eg.ux + (2 * eg.cellW + gap) * eg.nx;
-    const wy = eg.originY + 4 * eg.cellH * eg.uy + (2 * eg.cellH + gap) * eg.ny;
+    const offset = clockRingOffset(n);
+    const wx = eg.originX + 4 * eg.cellW * eg.ux + offset * eg.nx;
+    const wy = eg.originY + 4 * eg.cellH * eg.uy + offset * eg.ny;
     const [rwx, rwy] = rotateByAngle(wx, wy, viewRotation);
     const sx = boardPan.x + rwx * scale;
     const sy = boardPan.y - rwy * scale;
@@ -1766,7 +1785,7 @@ function updateClockPanel() {
       const cls = ['clockRow', out ? 'out' : '', active ? 'active' : '', low ? 'low' : '', disc ? 'disc' : ''].filter(Boolean).join(' ');
       const pc = playerColor(p, n);
       const style = active ? `border-color:${pc}; box-shadow:0 0 0 1px ${pc} inset;` : '';
-      return `<div class="${cls}" style="${style}"><span class="who"><span class="dot" style="background:${pc};color:${pc}"></span>Player ${p+1}${disc ? '<span class="discTag">Off</span>' : ''}</span><span class="right">${miniRingSvg(p, active, out)}<span class="time" style="color:${low ? '' : pc}">${formatClock(ms)}</span></span></div>`;
+      return `<div class="${cls}" style="${style}"><span class="who"><span class="dot" style="background:${pc};color:${pc}"></span>${playerLabel(p)}${disc ? '<span class="discTag">Off</span>' : ''}</span><span class="right">${miniRingSvg(p, active, out)}<span class="time" style="color:${low ? '' : pc}">${formatClock(ms)}</span></span></div>`;
     }).join('');
   }
   updateCircleTimer();
@@ -1812,7 +1831,7 @@ function updateCircleTimer() {
     circleRing.style.strokeDashoffset = String(CIRCLE_C * frac);
     circleRing.classList.add('overage');
     circleLabel.textContent = formatClock(bankMs);
-    circleSub.textContent = paused ? `Player ${turn+1} clock — paused` : `Player ${turn+1} clock`;
+    circleSub.textContent = paused ? `${playerLabel(turn)} clock — paused` : `${playerLabel(turn)} clock`;
   }
 }
 
