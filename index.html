@@ -225,6 +225,11 @@
   .lobbyBox .row { margin-bottom: 14px; }
   .lobbyBox .row label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; color: #b8c2d8; }
   .lobbyBox .row input[type=range] { width: 100%; accent-color: var(--sky); }
+  .checkRow {
+    display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #b8c2d8;
+    margin-bottom: 12px; cursor: pointer;
+  }
+  .checkRow input[type=checkbox] { accent-color: var(--sky); width: 15px; height: 15px; flex-shrink: 0; }
   .lobbyPrimaryBtn, .lobbySecondaryBtn {
     width: 100%; padding: 11px; border-radius: 6px; font-size: 13.5px; font-weight: 700;
     cursor: pointer; letter-spacing: 0.3px; margin-top: 4px;
@@ -353,6 +358,7 @@
           <span>Total clock (min)</span>
           <input type="number" id="totalClockInput" min="1" max="180" step="1" value="10">
         </div>
+        <label class="checkRow"><input type="checkbox" id="zombieCheck" checked> Captured king's army joins the capturer</label>
       </div>
       <div id="setupSummary" class="setupSummary hidden"></div>
     </div>
@@ -379,6 +385,7 @@
       </div>
       <div class="numRow"><span>Move timer (sec)</span><input type="number" id="lobbyMoveTimerInput" min="5" max="600" step="5" value="30"></div>
       <div class="numRow"><span>Total clock (min)</span><input type="number" id="lobbyTotalClockInput" min="1" max="180" step="1" value="10"></div>
+      <label class="checkRow"><input type="checkbox" id="lobbyZombieCheck" checked> Captured king's army joins the capturer</label>
       <div class="numRow"><span>Your name</span><input type="text" id="lobbyNameInputCreate" maxlength="16" placeholder="Player"></div>
       <button id="lobbyCreateBtn" class="lobbyPrimaryBtn" type="button">Create Room</button>
     </div>
@@ -444,6 +451,20 @@ let W = 800, H = 800;
 let boardPan = {x: null, y: null}; // screen-space translate origin; set on first resize
 let lastDrawnZoom = 1;
 let boardZoom = 1; // fixed zoom level — only changed via the "zoom to fit" button
+let boardViewRotation = 0; // extra rotation so each player's own side faces them
+
+// Recomputes boardViewRotation so that, in a multiplayer room, the local
+// player's home wedge/edge is rotated to sit at the bottom of their screen
+// (facing them), regardless of their seat number. Local hotseat play always
+// uses 0 (no rotation).
+function updateBoardViewRotation() {
+  if (roomCode && !isSpectator && mySeat !== null && n) {
+    const a = (2 * Math.PI) / n;
+    boardViewRotation = Math.PI - (mySeat + 1.5) * a;
+  } else {
+    boardViewRotation = 0;
+  }
+}
 
 // World-space half-extent of the board's outer boundary, used to compute a
 // zoom level that fits the whole board inside the canvas.
@@ -821,6 +842,7 @@ let activePlayers = Array.from({length:n}, (_,i)=>i);
 let turn = 0;
 let selected = null, legalMoves = [], gameOver = false, winner = null, message = '', lastMoveHighlight = null;
 let gameStarted = false, paused = false, pauseStartTs = null;
+let zombieChess = true; // when a king is captured, do the eliminated player's remaining pieces defect to the capturer, or vanish?
 
 // ── Chess clocks: configurable per-move limit, overage eats into a bank ────
 let MOVE_LIMIT_MS = 30 * 1000;
@@ -946,10 +968,16 @@ function executeMove(fromKey, toCell, meta) {
 
   if (eliminated !== null) {
     activePlayers = activePlayers.filter(p => p !== eliminated);
-    // Zombie chess: the eliminated player's surviving army defects to
-    // whoever captured their king, instead of vanishing.
-    for (const k in board) if (board[k].player === eliminated) board[k].player = mover;
-    message = `Player ${eliminated+1} eliminated! Player ${mover+1} claims their army.`;
+    if (zombieChess) {
+      // Zombie chess: the eliminated player's surviving army defects to
+      // whoever captured their king, instead of vanishing.
+      for (const k in board) if (board[k].player === eliminated) board[k].player = mover;
+      message = `Player ${eliminated+1} eliminated! Player ${mover+1} claims their army.`;
+    } else {
+      // Classic: the eliminated player's remaining pieces are simply removed.
+      for (const k in board) if (board[k].player === eliminated) delete board[k];
+      message = `Player ${eliminated+1} eliminated!`;
+    }
   } else {
     message = '';
   }
@@ -983,7 +1011,7 @@ function previewSetup(nn) {
 }
 
 function setupSummaryText() {
-  return `<b>${n}</b> players · <b>${Math.round(MOVE_LIMIT_MS/1000)}s</b>/move · <b>${Math.round(MAIN_CLOCK_MS/60000)}:00</b> clock`;
+  return `<b>${n}</b> players · <b>${Math.round(MOVE_LIMIT_MS/1000)}s</b>/move · <b>${Math.round(MAIN_CLOCK_MS/60000)}:00</b> clock · <b>${zombieChess ? 'zombie' : 'classic'}</b> captures`;
 }
 
 function startNewGameFromSetup() {
@@ -992,6 +1020,7 @@ function startNewGameFromSetup() {
   const clockMin = Math.max(1, parseInt(totalClockInput.value, 10) || 10);
   MOVE_LIMIT_MS = moveSec * 1000;
   MAIN_CLOCK_MS = clockMin * 60 * 1000;
+  zombieChess = document.getElementById('zombieCheck').checked;
   gameStarted = true;
   newGame(nn);
   document.getElementById('newGameBtn').classList.add('hidden');
@@ -1052,6 +1081,7 @@ function togglePause() {
 // ── Multiplayer (Firebase) ──────────────────────────────────────────────
 let myUid = null;
 let roomCode = null;
+let roomUnsub = null;      // unsubscribe fn for the active Firebase room listener
 let roomConfig = null;      // {n, moveLimitMs, mainClockMs}
 let roomSeats = {};         // {"0": uid, "1": uid, ...}
 let roomPlayers = {};       // {uid: {name, seat}}
@@ -1173,7 +1203,7 @@ function renderRoomBar() {
 
 function renderRoomUI(room) {
   const lobbyOverlay = document.getElementById('lobbyOverlay');
-  const waitOverlay = document.getElementById('roomWaitOverlay');
+  const waitOverlay = document.getElementById('roomWaitCard');
   const endOverlay = document.getElementById('gameEndOverlay');
   const resignBtn = document.getElementById('resignBtn');
   const abortBtn = document.getElementById('abortBtn');
@@ -1221,7 +1251,7 @@ function computeMyRole(room) {
 }
 
 function listenRoom(code) {
-  onValue(ref(db, `rooms/${code}`), (snap) => {
+  roomUnsub = onValue(ref(db, `rooms/${code}`), (snap) => {
     const room = snap.val();
     if (!room) {
       // Room no longer exists — send everyone back to the entry lobby.
@@ -1230,6 +1260,7 @@ function listenRoom(code) {
       return;
     }
     roomConfig = room.config || roomConfig;
+    if (roomConfig) zombieChess = roomConfig.zombieChess !== false;
     computeMyRole(room);
     if (room.state) applyRemoteState(room.state);
     roomStatus = room.status;
@@ -1267,7 +1298,7 @@ async function createRoom() {
     const clockMin = Math.max(1, parseInt(document.getElementById('lobbyTotalClockInput').value, 10) || 10);
     const name = (document.getElementById('lobbyNameInputCreate').value || 'Player 1').trim().slice(0, 16) || 'Player 1';
     const code = makeRoomCode();
-    const config = { n: nn, moveLimitMs: moveSec * 1000, mainClockMs: clockMin * 60 * 1000 };
+    const config = { n: nn, moveLimitMs: moveSec * 1000, mainClockMs: clockMin * 60 * 1000, zombieChess: document.getElementById('lobbyZombieCheck').checked };
     await set(ref(db, `rooms/${code}`), {
       hostUid: myUid,
       status: 'lobby',
@@ -1511,8 +1542,9 @@ function updateBoardClocks() {
     const gap = eg.cellW * 0.85;
     const wx = eg.originX + 4 * eg.cellW * eg.ux + (2 * eg.cellW + gap) * eg.nx;
     const wy = eg.originY + 4 * eg.cellH * eg.uy + (2 * eg.cellH + gap) * eg.ny;
-    const sx = boardPan.x + wx * scale;
-    const sy = boardPan.y - wy * scale;
+    const [rwx, rwy] = rotPt(wx, wy, boardViewRotation);
+    const sx = boardPan.x + rwx * scale;
+    const sy = boardPan.y - rwy * scale;
     el.style.left = sx + 'px';
     el.style.top = sy + 'px';
     el.style.width = sizePx + 'px';
@@ -1595,12 +1627,14 @@ function draw() {
   aVal.textContent = n;
   const a = (2 * Math.PI) / n;
   const zoom = boardZoom;
+  updateBoardViewRotation();
 
   ctx.clearRect(0, 0, W, H);
   ctx.save();
   ctx.translate(boardPan.x, boardPan.y);
   const scale = (W / 5) * zoom;
   ctx.scale(scale, -scale);
+  ctx.rotate(boardViewRotation);
   lastDrawnZoom = zoom;
 
   const rList = [0,1,2,3,4,5,6,7,8];
@@ -1828,7 +1862,8 @@ function draw() {
     const info = board[key];
     const g = cellGeoOfGlobal(keyToCell(key));
     if (!g) continue;
-    const sx = boardPan.x + g.cx*scale, sy = boardPan.y - g.cy*scale;
+    const [rcx, rcy] = rotPt(g.cx, g.cy, boardViewRotation);
+    const sx = boardPan.x + rcx*scale, sy = boardPan.y - rcy*scale;
     const side = Math.hypot(g.pts[1][0]-g.pts[0][0], g.pts[1][1]-g.pts[0][1]);
     const r = Math.max(4, side*scale*0.42);
     ctx.font = `${r*1.7}px serif`;
@@ -1886,7 +1921,11 @@ function handleCanvasTap(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   const mx = clientX-rect.left, my = clientY-rect.top;
   const scale = (W/5)*boardZoom;
-  const wx = (mx-boardPan.x)/scale, wy = -(my-boardPan.y)/scale;
+  const wx0 = (mx-boardPan.x)/scale, wy0 = -(my-boardPan.y)/scale;
+  // lastWedgeCells/lastCellGeo are stored in unrotated world space, but the
+  // board is visually rotated by boardViewRotation for this player, so undo
+  // that rotation on the tap point before hit-testing against them.
+  const [wx, wy] = rotPt(wx0, wy0, -boardViewRotation);
 
   let clicked = null;
   for (const key in lastWedgeCells) {
