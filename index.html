@@ -1289,6 +1289,9 @@ function renderRoomSettings() {
   moveInput.disabled = !isHost;
   clockInput.disabled = !isHost;
   zombieCheck.disabled = !isHost;
+  // Reshape the (already-visible) board behind the lobby panel so everyone
+  // — not just the host mid-drag — can see the seating layout update live.
+  if (!gameStarted && roomConfig.n !== n) previewSetup(roomConfig.n);
 }
 
 function renderRoomBar() {
@@ -1531,7 +1534,13 @@ function pushRoomConfigChange(partial) {
 }
 const roomASlider = document.getElementById('roomASlider');
 const roomAVal = document.getElementById('roomAVal');
-roomASlider.addEventListener('input', () => { roomAVal.textContent = roomASlider.value; });
+roomASlider.addEventListener('input', () => {
+  const nn = parseInt(roomASlider.value, 10);
+  roomAVal.textContent = nn;
+  // Live-preview the board shape for the host while dragging, ahead of the
+  // Firebase round-trip that will sync it to everyone else.
+  if (!gameStarted) previewSetup(nn);
+});
 roomASlider.addEventListener('change', () => {
   pushRoomConfigChange({ n: parseInt(roomASlider.value, 10) });
 });
