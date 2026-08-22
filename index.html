@@ -444,12 +444,12 @@
     <div class="card" id="displayCard">
       <h2>Display</h2>
       <div class="row">
-        <label>Board alpha <span class="val" id="boardAlphaVal">55%</span></label>
-        <input type="range" id="boardAlphaSlider" min="0" max="100" step="1" value="55">
+        <label>Board luminosity <span class="val" id="boardLumVal">0</span></label>
+        <input type="range" id="boardLumSlider" min="-40" max="40" step="1" value="0">
       </div>
       <div class="row">
-        <label>Luminosity <span class="val" id="boardLumVal">0</span></label>
-        <input type="range" id="boardLumSlider" min="-40" max="40" step="1" value="0">
+        <label>Piece luminosity <span class="val" id="pieceLumVal">0</span></label>
+        <input type="range" id="pieceLumSlider" min="-40" max="40" step="1" value="0">
       </div>
     </div>
     <div class="card hidden" id="roomLobbyCard">
@@ -1105,8 +1105,9 @@ function setupBoard(nn) {
   }
   return b;
 }
-let boardAlpha = 0.55;    // 0-1, fill opacity for the board's hue-shifted tiles/kites
-let boardLuminosity = 0;  // -40..40, added to the OKLCH lightness of board tiles + pieces
+let boardAlpha = 1;       // fill opacity for the board's hue-shifted tiles/kites (fixed at fully opaque)
+let boardLuminosity = 0;  // -40..40, added to the OKLCH lightness of board tiles
+let pieceLuminosity = 0;  // -40..40, added to the OKLCH lightness of pieces
 function clampPct(v) { return Math.max(0, Math.min(100, v)); }
 function playerColor(p, nn) {
   const hue = Math.round((p / nn) * 360);
@@ -1114,7 +1115,7 @@ function playerColor(p, nn) {
   // e.g. yellow reads much brighter than blue at the same L value), and we
   // pick L per theme so pieces always contrast against the board: light
   // pieces on the dark board, dark pieces on the light pastel board.
-  const light = clampPct((theme === 'pastel' ? 52 : 68) + boardLuminosity);
+  const light = clampPct((theme === 'pastel' ? 52 : 68) + pieceLuminosity);
   const chroma = theme === 'pastel' ? 0.21 : 0.16;
   return `oklch(${light}% ${chroma} ${hue})`;
 }
@@ -2693,18 +2694,18 @@ aSlider.addEventListener('input', () => {
   previewSetup(parseInt(aSlider.value, 10));
 });
 
-const boardAlphaSlider = document.getElementById('boardAlphaSlider');
-const boardAlphaVal = document.getElementById('boardAlphaVal');
-boardAlphaSlider.addEventListener('input', () => {
-  boardAlpha = parseInt(boardAlphaSlider.value, 10) / 100;
-  boardAlphaVal.textContent = `${boardAlphaSlider.value}%`;
-  draw();
-});
 const boardLumSlider = document.getElementById('boardLumSlider');
 const boardLumVal = document.getElementById('boardLumVal');
 boardLumSlider.addEventListener('input', () => {
   boardLuminosity = parseInt(boardLumSlider.value, 10);
   boardLumVal.textContent = boardLumSlider.value;
+  draw();
+});
+const pieceLumSlider = document.getElementById('pieceLumSlider');
+const pieceLumVal = document.getElementById('pieceLumVal');
+pieceLumSlider.addEventListener('input', () => {
+  pieceLuminosity = parseInt(pieceLumSlider.value, 10);
+  pieceLumVal.textContent = pieceLumSlider.value;
   draw();
 });
 
