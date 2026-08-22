@@ -53,6 +53,7 @@
     --btn-warn-border: #ababab;
   }
   html[data-theme="pastel"] {
+    --sky: #8D89A6;
     --bg-page: #f7f0fb;
     --bg-canvas: #f3ecf9;
     --bg-panel: #ffffff;
@@ -441,17 +442,6 @@
     </div>
   </div>
   <div id="panel">
-    <div class="card" id="displayCard">
-      <h2>Display</h2>
-      <div class="row">
-        <label>Board luminosity <span class="val" id="boardLumVal">0</span></label>
-        <input type="range" id="boardLumSlider" min="-40" max="40" step="1" value="0">
-      </div>
-      <div class="row">
-        <label>Piece luminosity <span class="val" id="pieceLumVal">0</span></label>
-        <input type="range" id="pieceLumSlider" min="-40" max="40" step="1" value="0">
-      </div>
-    </div>
     <div class="card hidden" id="roomLobbyCard">
       <h2>Room <span style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--text-faint);">— waiting to start</span></h2>
       <div class="roomCodeDisplay"><span id="roomCodeText">-----</span> <button id="copyCodeBtn" type="button" title="Copy room code">⧉</button></div>
@@ -1106,15 +1096,17 @@ function setupBoard(nn) {
   return b;
 }
 let boardAlpha = 1;       // fill opacity for the board's hue-shifted tiles/kites (fixed at fully opaque)
-let boardLuminosity = 0;  // -40..40, added to the OKLCH lightness of board tiles
-let pieceLuminosity = 0;  // -40..40, added to the OKLCH lightness of pieces
+let boardLuminosity = 0;  // added to the OKLCH lightness of board tiles (both themes)
 function clampPct(v) { return Math.max(0, Math.min(100, v)); }
 function playerColor(p, nn) {
   const hue = Math.round((p / nn) * 360);
   // OKLCH keeps lightness perceptually even across hues (unlike HSL, where
   // e.g. yellow reads much brighter than blue at the same L value), and we
   // pick L per theme so pieces always contrast against the board: light
-  // pieces on the dark board, dark pieces on the light pastel board.
+  // pieces on the dark board, dark pieces on the light pastel board. Pastel
+  // pieces get a fixed +16 lightness bump (dark theme stays as-is) since
+  // they otherwise read a touch too saturated/dark against the light board.
+  const pieceLuminosity = theme === 'pastel' ? 16 : 0;
   const light = clampPct((theme === 'pastel' ? 52 : 68) + pieceLuminosity);
   const chroma = theme === 'pastel' ? 0.21 : 0.16;
   return `oklch(${light}% ${chroma} ${hue})`;
@@ -2692,21 +2684,6 @@ document.getElementById('fitBtn').addEventListener('click', zoomToFit);
 aSlider.addEventListener('input', () => {
   if (gameStarted) return;
   previewSetup(parseInt(aSlider.value, 10));
-});
-
-const boardLumSlider = document.getElementById('boardLumSlider');
-const boardLumVal = document.getElementById('boardLumVal');
-boardLumSlider.addEventListener('input', () => {
-  boardLuminosity = parseInt(boardLumSlider.value, 10);
-  boardLumVal.textContent = boardLumSlider.value;
-  draw();
-});
-const pieceLumSlider = document.getElementById('pieceLumSlider');
-const pieceLumVal = document.getElementById('pieceLumVal');
-pieceLumSlider.addEventListener('input', () => {
-  pieceLuminosity = parseInt(pieceLumSlider.value, 10);
-  pieceLumVal.textContent = pieceLumSlider.value;
-  draw();
 });
 
 function resizeCanvas() {
