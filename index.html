@@ -491,17 +491,6 @@
       </div>
     </div>
 
-    <div class="card" id="displayCard">
-      <h2>Display</h2>
-      <div class="row">
-        <label>Board luminosity <span class="val" id="lumVal">85</span></label>
-        <input type="range" id="lumSlider" min="15" max="98" step="1" value="50">
-      </div>
-      <div style="font-size:11px; color:var(--text-faint); margin-top:-6px;">
-        oklch bright L=<span id="lumBrightVal">85%</span> · dim L=<span id="lumDimVal">92%</span>
-      </div>
-    </div>
-
     <div class="card hidden" id="setupCard">
       <h2>Setup</h2>
       <div id="setupControls">
@@ -588,47 +577,13 @@ try {
   const saved = localStorage.getItem('limaconTheme');
   if (saved === 'pastel' || saved === 'dark') theme = saved;
 } catch (e) {}
-
-// Board-tile luminosity (OKLCH L%), independently tunable per theme via the
-// slider below. `dim` always trails `bright` by a fixed gap so the two
-// tones stay visually distinct as you scrub the slider. Defaults match the
-// original hardcoded values (pastel 85/92, dark 45/45).
-const boardLum = {
-  pastel: { bright: 75, dim: 82 },
-  dark: { bright: 50, dim: 50 },
-};
-try {
-  const savedLum = JSON.parse(localStorage.getItem('limaconBoardLum') || 'null');
-  if (savedLum && savedLum.pastel && savedLum.dark) Object.assign(boardLum, savedLum);
-} catch (e) {}
-const DIM_GAP = { pastel: 7, dark: 0 };
-
 function applyTheme(t) {
   theme = t;
   document.documentElement.setAttribute('data-theme', t);
   const label = document.getElementById('themeToggleLabel');
   if (label) label.textContent = t === 'pastel' ? 'Pastel' : 'Dark';
   try { localStorage.setItem('limaconTheme', t); } catch (e) {}
-  syncLumSlider();
 }
-function syncLumSlider() {
-  const slider = document.getElementById('lumSlider');
-  const L = boardLum[theme];
-  if (document.activeElement !== slider) slider.value = L.bright;
-  document.getElementById('lumVal').textContent = L.bright;
-  document.getElementById('lumBrightVal').textContent = L.bright + '%';
-  document.getElementById('lumDimVal').textContent = L.dim + '%';
-}
-document.getElementById('lumSlider').addEventListener('input', (ev) => {
-  const v = parseInt(ev.target.value, 10);
-  boardLum[theme].bright = v;
-  boardLum[theme].dim = Math.max(5, Math.min(98, v + DIM_GAP[theme]));
-  document.getElementById('lumVal').textContent = v;
-  document.getElementById('lumBrightVal').textContent = v + '%';
-  document.getElementById('lumDimVal').textContent = boardLum[theme].dim + '%';
-  try { localStorage.setItem('limaconBoardLum', JSON.stringify(boardLum)); } catch (e) {}
-  draw();
-});
 applyTheme(theme);
 document.getElementById('themeToggleBtn').addEventListener('click', () => {
   applyTheme(theme === 'pastel' ? 'dark' : 'pastel');
@@ -1145,8 +1100,8 @@ function playerColor(p, nn) {
   // e.g. yellow reads much brighter than blue at the same L value), and we
   // pick L per theme so pieces always contrast against the board: light
   // pieces on the dark board, dark pieces on the light pastel board.
-  const light = theme === 'pastel' ? 66 : 68;
-  const chroma = theme === 'pastel' ? 0.24 : 0.16;
+  const light = theme === 'pastel' ? 52 : 68;
+  const chroma = theme === 'pastel' ? 0.21 : 0.16;
   return `oklch(${light}% ${chroma} ${hue})`;
 }
 // In a room, prefer the seated player's chosen display name over the
@@ -2040,14 +1995,13 @@ function sliceColor(k, n, bright) {
   // fixed OKLCH lightness keeps every wedge reading as the same tile
   // brightness, instead of some hues washing out or going muddy the way
   // the old HSLA version did.
-  const L = boardLum[theme];
   if (theme === 'pastel') {
-    return bright ? `oklch(${L.bright}% 0.09 ${hue} / 0.65)` : `oklch(${L.dim}% 0.05 ${hue} / 0.4)`;
+    return bright ? `oklch(85% 0.09 ${hue} / 0.65)` : null;
   }
-  return bright ? `oklch(${L.bright}% 0.1 ${hue} / 0.55)` : `oklch(${L.dim}% 0.1 ${hue} / 0.14)`;
+  return bright ? `oklch(45% 0.1 ${hue} / 0.55)` : null;
 }
 function sliceStroke(k, n) {
-  const hue = Math.round((200 + (k / n) * 720) % 360);
+  const hue = Math.round((200 + (k / n) * 360) % 360);
   return `oklch(62% 0.12 ${hue} / 0.5)`;
 }
 
@@ -2453,23 +2407,17 @@ function draw() {
     const cosR=Math.cos(rotAngle), sinR=Math.sin(rotAngle);
     function rot(x,y){ return [x*cosR-y*sinR, x*sinR+y*cosR]; }
     ctx.save();
-    // Batch same-colored squares into one Path2D per color and fill each
-    // once, instead of one fill() call per square. Filling shape-by-shape
-    // with a semi-transparent color double-paints the anti-aliased pixels
-    // on any edge shared by two same-colored squares, which shows up as a
-    // faint darker seam running through what should be a uniform tile. A
-    // single fill() over a combined path only composites once, no matter
-    // how many squares are stitched into it.
-    const brightPath = new Path2D();
-    const dimPath = new Path2D();
     kiteKeys.forEach(key=>{
       const cd=kiteCells[key];
       const bright=(kiteParity[key]??0)===0;
+      const fill=sliceColor(kki,n,bright);
+      if(!fill) return; // non-hue-shifting kite — leave it transparent
       const rpts=cd.pts.map(([x,y])=>rot(x,y));
-      const p = bright ? brightPath : dimPath;
-      p.moveTo(rpts[0][0],rpts[0][1]);
-      for(let i=1;i<4;i++) p.lineTo(rpts[i][0],rpts[i][1]);
-      p.closePath();
+      ctx.beginPath();
+      ctx.moveTo(rpts[0][0],rpts[0][1]);
+      for(let i=1;i<4;i++) ctx.lineTo(rpts[i][0],rpts[i][1]);
+      ctx.closePath();
+      ctx.fillStyle=fill; ctx.fill();
     });
     for(let i=0;i<n;i++){
       if(!edgeG[i]) continue;
@@ -2481,15 +2429,16 @@ function draw() {
         const rawP = checkerParity[key] ?? 0;
         const flipEdge = (n !== 4 && n !== 7);
         const bright = (flipEdge ? 1 - rawP : rawP) === 0;
+        const fill=sliceColor(kki,n,bright);
+        if(!fill) continue; // non-hue-shifting square — leave it transparent
         const rpts=[rot(x0,y0),rot(x1,y1),rot(x2,y2),rot(x3,y3)];
-        const p = bright ? brightPath : dimPath;
-        p.moveTo(rpts[0][0],rpts[0][1]);
-        for(let ii=1;ii<4;ii++) p.lineTo(rpts[ii][0],rpts[ii][1]);
-        p.closePath();
+        ctx.beginPath();
+        ctx.moveTo(rpts[0][0],rpts[0][1]);
+        for(let ii=1;ii<4;ii++) ctx.lineTo(rpts[ii][0],rpts[ii][1]);
+        ctx.closePath();
+        ctx.fillStyle=fill; ctx.fill();
       }
     }
-    ctx.fillStyle=sliceColor(kki,n,true); ctx.fill(brightPath);
-    ctx.fillStyle=sliceColor(kki,n,false); ctx.fill(dimPath);
     ctx.restore();
   }
 
