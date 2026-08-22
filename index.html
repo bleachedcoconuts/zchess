@@ -2034,12 +2034,15 @@ document.getElementById('backToRoomBtn').addEventListener('click', () => {
 // Slice hues are spread evenly around the full color wheel (not clustered in
 // one family) so that every pair of adjacent slices — including the wrap
 // from the last slice back to the first — gets the same, maximal hue gap.
+// Hue step is the golden angle (~137.5°) rather than an even 360/n or
+// 720/n sweep. An even sweep exactly repeats itself for any even n (e.g.
+// n=4 only produces 2 distinct hues, n=6 only 3) because 720/n divides
+// evenly into 360 and wraps back onto earlier slices. The golden angle is
+// irrational relative to n, so no player count ever produces a repeat, and
+// consecutive slices still land far apart around the wheel.
+const HUE_STEP = 137.50776;
 function sliceColor(k, n, bright) {
-  // Hue sweeps twice around the wheel (720°) across the n slices instead of
-  // once, so adjacent slices land roughly opposite each other in hue rather
-  // than a few degrees apart — much easier to tell neighboring wedges apart
-  // at a glance.
-  const hue = Math.round((200 + (k / n) * 720) % 360);
+  const hue = Math.round((200 + k * HUE_STEP) % 360);
   // OKLCH here for the same reason as playerColor: an even hue sweep at a
   // fixed OKLCH lightness keeps every wedge reading as the same tile
   // brightness, instead of some hues washing out or going muddy the way
@@ -2051,7 +2054,7 @@ function sliceColor(k, n, bright) {
   return bright ? `oklch(${L.bright}% 0.1 ${hue} / 0.55)` : `oklch(${L.dim}% 0.1 ${hue} / 0.14)`;
 }
 function sliceStroke(k, n) {
-  const hue = Math.round((200 + (k / n) * 720) % 360);
+  const hue = Math.round((200 + k * HUE_STEP) % 360);
   return `oklch(62% 0.12 ${hue} / 0.5)`;
 }
 
