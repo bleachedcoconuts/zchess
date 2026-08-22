@@ -594,14 +594,14 @@ try {
 // tones stay visually distinct as you scrub the slider. Defaults match the
 // original hardcoded values (pastel 85/92, dark 45/45).
 const boardLum = {
-  pastel: { bright: 75, dim: 90 },
-  dark: { bright: 50, dim: 32 },
+  pastel: { bright: 75, dim: 82 },
+  dark: { bright: 50, dim: 50 },
 };
 try {
   const savedLum = JSON.parse(localStorage.getItem('limaconBoardLum') || 'null');
   if (savedLum && savedLum.pastel && savedLum.dark) Object.assign(boardLum, savedLum);
 } catch (e) {}
-const DIM_GAP = { pastel: 15, dark: -18 };
+const DIM_GAP = { pastel: 7, dark: 0 };
 
 function applyTheme(t) {
   theme = t;
@@ -2040,19 +2040,15 @@ function sliceColor(k, n, bright) {
   // fixed OKLCH lightness keeps every wedge reading as the same tile
   // brightness, instead of some hues washing out or going muddy the way
   // the old HSLA version did.
-  // Fully opaque (no alpha) — semi-transparent fills were stacking wherever
-  // a wedge's stroke overlapped a neighboring wedge's fill, making that
-  // seam read as a darker patch of the "same" color. Opaque fills can't
-  // stack like that.
   const L = boardLum[theme];
   if (theme === 'pastel') {
-    return bright ? `oklch(${L.bright}% 0.1 ${hue})` : `oklch(${L.dim}% 0.035 ${hue})`;
+    return bright ? `oklch(${L.bright}% 0.09 ${hue} / 0.65)` : `oklch(${L.dim}% 0.05 ${hue} / 0.4)`;
   }
-  return bright ? `oklch(${L.bright}% 0.12 ${hue})` : `oklch(${L.dim}% 0.06 ${hue})`;
+  return bright ? `oklch(${L.bright}% 0.1 ${hue} / 0.55)` : `oklch(${L.dim}% 0.1 ${hue} / 0.14)`;
 }
 function sliceStroke(k, n) {
   const hue = Math.round((200 + (k / n) * 360) % 360);
-  return `oklch(62% 0.12 ${hue})`;
+  return `oklch(62% 0.12 ${hue} / 0.5)`;
 }
 
 const aSlider = document.getElementById('aSlider');
@@ -2457,15 +2453,23 @@ function draw() {
     const cosR=Math.cos(rotAngle), sinR=Math.sin(rotAngle);
     function rot(x,y){ return [x*cosR-y*sinR, x*sinR+y*cosR]; }
     ctx.save();
+    // Batch same-colored squares into one Path2D per color and fill each
+    // once, instead of one fill() call per square. Filling shape-by-shape
+    // with a semi-transparent color double-paints the anti-aliased pixels
+    // on any edge shared by two same-colored squares, which shows up as a
+    // faint darker seam running through what should be a uniform tile. A
+    // single fill() over a combined path only composites once, no matter
+    // how many squares are stitched into it.
+    const brightPath = new Path2D();
+    const dimPath = new Path2D();
     kiteKeys.forEach(key=>{
       const cd=kiteCells[key];
       const bright=(kiteParity[key]??0)===0;
       const rpts=cd.pts.map(([x,y])=>rot(x,y));
-      ctx.beginPath();
-      ctx.moveTo(rpts[0][0],rpts[0][1]);
-      for(let i=1;i<4;i++) ctx.lineTo(rpts[i][0],rpts[i][1]);
-      ctx.closePath();
-      ctx.fillStyle=sliceColor(kki,n,bright); ctx.fill();
+      const p = bright ? brightPath : dimPath;
+      p.moveTo(rpts[0][0],rpts[0][1]);
+      for(let i=1;i<4;i++) p.lineTo(rpts[i][0],rpts[i][1]);
+      p.closePath();
     });
     for(let i=0;i<n;i++){
       if(!edgeG[i]) continue;
@@ -2478,13 +2482,14 @@ function draw() {
         const flipEdge = (n !== 4 && n !== 7);
         const bright = (flipEdge ? 1 - rawP : rawP) === 0;
         const rpts=[rot(x0,y0),rot(x1,y1),rot(x2,y2),rot(x3,y3)];
-        ctx.beginPath();
-        ctx.moveTo(rpts[0][0],rpts[0][1]);
-        for(let ii=1;ii<4;ii++) ctx.lineTo(rpts[ii][0],rpts[ii][1]);
-        ctx.closePath();
-        ctx.fillStyle=sliceColor(kki,n,bright); ctx.fill();
+        const p = bright ? brightPath : dimPath;
+        p.moveTo(rpts[0][0],rpts[0][1]);
+        for(let ii=1;ii<4;ii++) p.lineTo(rpts[ii][0],rpts[ii][1]);
+        p.closePath();
       }
     }
+    ctx.fillStyle=sliceColor(kki,n,true); ctx.fill(brightPath);
+    ctx.fillStyle=sliceColor(kki,n,false); ctx.fill(dimPath);
     ctx.restore();
   }
 
