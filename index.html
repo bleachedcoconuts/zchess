@@ -1100,8 +1100,8 @@ function playerColor(p, nn) {
   // e.g. yellow reads much brighter than blue at the same L value), and we
   // pick L per theme so pieces always contrast against the board: light
   // pieces on the dark board, dark pieces on the light pastel board.
-  const light = theme === 'pastel' ? 52 : 68;
-  const chroma = theme === 'pastel' ? 0.21 : 0.16;
+  const light = theme === 'pastel' ? 66 : 68;
+  const chroma = theme === 'pastel' ? 0.24 : 0.16;
   return `oklch(${light}% ${chroma} ${hue})`;
 }
 // In a room, prefer the seated player's chosen display name over the
@@ -2499,6 +2499,13 @@ function draw() {
     const ascent = gm.actualBoundingBoxAscent ?? r*0.85;
     const descent = gm.actualBoundingBoxDescent ?? r*0.15;
     const drawY = sy + (ascent - descent) / 2;
+    // A thin outline keeps every player's hue legible against the board no
+    // matter how light the fill color is — without it, lighter pastel
+    // pieces can wash out against the equally-light board tiles.
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(1, r * (theme === 'pastel' ? 0.12 : 0.09));
+    ctx.strokeStyle = theme === 'pastel' ? 'rgba(40,30,50,0.55)' : 'rgba(0,0,0,0.55)';
+    ctx.strokeText(glyph, sx, drawY);
     ctx.fillStyle = playerColor(info.player, n); ctx.fillText(glyph, sx, drawY);
   }
 
