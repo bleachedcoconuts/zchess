@@ -2035,7 +2035,7 @@ document.getElementById('backToRoomBtn').addEventListener('click', () => {
 // one family) so that every pair of adjacent slices — including the wrap
 // from the last slice back to the first — gets the same, maximal hue gap.
 function sliceColor(k, n, bright) {
-  const hue = Math.round((200 + (k / n) * 360) % 360);
+  const hue = Math.round((200 + (k / n) * 720) % 360);
   // OKLCH here for the same reason as playerColor: an even hue sweep at a
   // fixed OKLCH lightness keeps every wedge reading as the same tile
   // brightness, instead of some hues washing out or going muddy the way
@@ -2047,7 +2047,7 @@ function sliceColor(k, n, bright) {
   return bright ? `oklch(${L.bright}% 0.1 ${hue} / 0.55)` : `oklch(${L.dim}% 0.1 ${hue} / 0.14)`;
 }
 function sliceStroke(k, n) {
-  const hue = Math.round((200 + (k / n) * 360) % 360);
+  const hue = Math.round((200 + (k / n) * 720) % 360);
   return `oklch(62% 0.12 ${hue} / 0.5)`;
 }
 
