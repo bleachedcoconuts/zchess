@@ -491,6 +491,17 @@
       </div>
     </div>
 
+    <div class="card" id="displayCard">
+      <h2>Display</h2>
+      <div class="row">
+        <label>Board luminosity <span class="val" id="lumVal">85</span></label>
+        <input type="range" id="lumSlider" min="15" max="98" step="1" value="85">
+      </div>
+      <div style="font-size:11px; color:var(--text-faint); margin-top:-6px;">
+        oklch bright L=<span id="lumBrightVal">85%</span> · dim L=<span id="lumDimVal">92%</span>
+      </div>
+    </div>
+
     <div class="card hidden" id="setupCard">
       <h2>Setup</h2>
       <div id="setupControls">
@@ -577,13 +588,47 @@ try {
   const saved = localStorage.getItem('limaconTheme');
   if (saved === 'pastel' || saved === 'dark') theme = saved;
 } catch (e) {}
+
+// Board-tile luminosity (OKLCH L%), independently tunable per theme via the
+// slider below. `dim` always trails `bright` by a fixed gap so the two
+// tones stay visually distinct as you scrub the slider. Defaults match the
+// original hardcoded values (pastel 85/92, dark 45/45).
+const boardLum = {
+  pastel: { bright: 85, dim: 92 },
+  dark: { bright: 45, dim: 45 },
+};
+try {
+  const savedLum = JSON.parse(localStorage.getItem('limaconBoardLum') || 'null');
+  if (savedLum && savedLum.pastel && savedLum.dark) Object.assign(boardLum, savedLum);
+} catch (e) {}
+const DIM_GAP = { pastel: 7, dark: 0 };
+
 function applyTheme(t) {
   theme = t;
   document.documentElement.setAttribute('data-theme', t);
   const label = document.getElementById('themeToggleLabel');
   if (label) label.textContent = t === 'pastel' ? 'Pastel' : 'Dark';
   try { localStorage.setItem('limaconTheme', t); } catch (e) {}
+  syncLumSlider();
 }
+function syncLumSlider() {
+  const slider = document.getElementById('lumSlider');
+  const L = boardLum[theme];
+  if (document.activeElement !== slider) slider.value = L.bright;
+  document.getElementById('lumVal').textContent = L.bright;
+  document.getElementById('lumBrightVal').textContent = L.bright + '%';
+  document.getElementById('lumDimVal').textContent = L.dim + '%';
+}
+document.getElementById('lumSlider').addEventListener('input', (ev) => {
+  const v = parseInt(ev.target.value, 10);
+  boardLum[theme].bright = v;
+  boardLum[theme].dim = Math.min(98, v + DIM_GAP[theme]);
+  document.getElementById('lumVal').textContent = v;
+  document.getElementById('lumBrightVal').textContent = v + '%';
+  document.getElementById('lumDimVal').textContent = boardLum[theme].dim + '%';
+  try { localStorage.setItem('limaconBoardLum', JSON.stringify(boardLum)); } catch (e) {}
+  draw();
+});
 applyTheme(theme);
 document.getElementById('themeToggleBtn').addEventListener('click', () => {
   applyTheme(theme === 'pastel' ? 'dark' : 'pastel');
@@ -1995,10 +2040,11 @@ function sliceColor(k, n, bright) {
   // fixed OKLCH lightness keeps every wedge reading as the same tile
   // brightness, instead of some hues washing out or going muddy the way
   // the old HSLA version did.
+  const L = boardLum[theme];
   if (theme === 'pastel') {
-    return bright ? `oklch(85% 0.09 ${hue} / 0.65)` : `oklch(92% 0.05 ${hue} / 0.4)`;
+    return bright ? `oklch(${L.bright}% 0.09 ${hue} / 0.65)` : `oklch(${L.dim}% 0.05 ${hue} / 0.4)`;
   }
-  return bright ? `oklch(45% 0.1 ${hue} / 0.55)` : `oklch(45% 0.1 ${hue} / 0.14)`;
+  return bright ? `oklch(${L.bright}% 0.1 ${hue} / 0.55)` : `oklch(${L.dim}% 0.1 ${hue} / 0.14)`;
 }
 function sliceStroke(k, n) {
   const hue = Math.round((200 + (k / n) * 360) % 360);
