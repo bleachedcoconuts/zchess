@@ -441,6 +441,17 @@
     </div>
   </div>
   <div id="panel">
+    <div class="card" id="displayCard">
+      <h2>Display</h2>
+      <div class="row">
+        <label>Board alpha <span class="val" id="boardAlphaVal">55%</span></label>
+        <input type="range" id="boardAlphaSlider" min="0" max="100" step="1" value="55">
+      </div>
+      <div class="row">
+        <label>Luminosity <span class="val" id="boardLumVal">0</span></label>
+        <input type="range" id="boardLumSlider" min="-40" max="40" step="1" value="0">
+      </div>
+    </div>
     <div class="card hidden" id="roomLobbyCard">
       <h2>Room <span style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--text-faint);">— waiting to start</span></h2>
       <div class="roomCodeDisplay"><span id="roomCodeText">-----</span> <button id="copyCodeBtn" type="button" title="Copy room code">⧉</button></div>
@@ -1094,13 +1105,16 @@ function setupBoard(nn) {
   }
   return b;
 }
+let boardAlpha = 0.55;    // 0-1, fill opacity for the board's hue-shifted tiles/kites
+let boardLuminosity = 0;  // -40..40, added to the OKLCH lightness of board tiles + pieces
+function clampPct(v) { return Math.max(0, Math.min(100, v)); }
 function playerColor(p, nn) {
   const hue = Math.round((p / nn) * 360);
   // OKLCH keeps lightness perceptually even across hues (unlike HSL, where
   // e.g. yellow reads much brighter than blue at the same L value), and we
   // pick L per theme so pieces always contrast against the board: light
   // pieces on the dark board, dark pieces on the light pastel board.
-  const light = theme === 'pastel' ? 52 : 68;
+  const light = clampPct((theme === 'pastel' ? 52 : 68) + boardLuminosity);
   const chroma = theme === 'pastel' ? 0.21 : 0.16;
   return `oklch(${light}% ${chroma} ${hue})`;
 }
@@ -1996,9 +2010,11 @@ function sliceColor(k, n, bright) {
   // brightness, instead of some hues washing out or going muddy the way
   // the old HSLA version did.
   if (theme === 'pastel') {
-    return bright ? `oklch(85% 0.09 ${hue} / 0.65)` : null;
+    const light = clampPct(85 + boardLuminosity);
+    return bright ? `oklch(${light}% 0.09 ${hue} / ${boardAlpha})` : null;
   }
-  return bright ? `oklch(45% 0.1 ${hue} / 0.55)` : null;
+  const light = clampPct(45 + boardLuminosity);
+  return bright ? `oklch(${light}% 0.1 ${hue} / ${boardAlpha})` : null;
 }
 function sliceStroke(k, n) {
   const hue = Math.round((200 + (k / n) * 360) % 360);
@@ -2675,6 +2691,21 @@ document.getElementById('fitBtn').addEventListener('click', zoomToFit);
 aSlider.addEventListener('input', () => {
   if (gameStarted) return;
   previewSetup(parseInt(aSlider.value, 10));
+});
+
+const boardAlphaSlider = document.getElementById('boardAlphaSlider');
+const boardAlphaVal = document.getElementById('boardAlphaVal');
+boardAlphaSlider.addEventListener('input', () => {
+  boardAlpha = parseInt(boardAlphaSlider.value, 10) / 100;
+  boardAlphaVal.textContent = `${boardAlphaSlider.value}%`;
+  draw();
+});
+const boardLumSlider = document.getElementById('boardLumSlider');
+const boardLumVal = document.getElementById('boardLumVal');
+boardLumSlider.addEventListener('input', () => {
+  boardLuminosity = parseInt(boardLumSlider.value, 10);
+  boardLumVal.textContent = boardLumSlider.value;
+  draw();
 });
 
 function resizeCanvas() {
