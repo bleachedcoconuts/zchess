@@ -2,55 +2,55 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Limaçon Chess — n-player</title>
+<title>N-Player Zombie Chess</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --sky: #55abff;
-    --teal: #55abab;
-    --grey: #ababab;
+    --sky: #C4173B;
+    --teal: #8a2f5f;
+    --grey: #ab8f95;
     --paper: #ffffff;
-    --indigo: #5555ab;
-    --salmon: #ffabab;
-    --deep: #0055ab;
+    --indigo: #5F0F40;
+    --salmon: #CC8B86;
+    --deep: #9A031E;
 
     /* Neutral surface/text tokens — these flip between themes; branded
        accents (sky/teal/salmon/etc.) stay constant across both. */
-    --bg-page: #0a0f1c;
-    --bg-canvas: #161d33;
-    --bg-panel: #101524;
-    --bg-panel-alt: #0d1220;
-    --bg-input: #0a0e1a;
-    --border: #232a40;
-    --border-strong: #2a3350;
-    --border-soft: #1a2033;
-    --text-primary: #e8ecf4;
-    --text-secondary: #cfd6e6;
-    --text-tertiary: #b8c2d8;
-    --text-muted: #7d8aa3;
-    --text-faint: #5a6580;
-    --topbar-bg: rgba(10,14,26,0.65);
-    --topbar-border: rgba(85,171,255,0.12);
-    --panel-left-border: rgba(85,171,255,0.10);
-    --overlay-dim: rgba(5,7,14,0.65);
-    --overlay-strong: rgba(6,9,17,0.92);
-    --fitbtn-bg: rgba(13,18,32,0.85);
-    --page-glow-1: rgba(85,171,255,0.14);
-    --page-glow-2: rgba(85,85,171,0.22);
-    --page-glow-3: rgba(85,171,171,0.18);
+    --bg-page: #1a0a13;
+    --bg-canvas: #321325;
+    --bg-panel: #29101f;
+    --bg-panel-alt: #220d19;
+    --bg-input: #180911;
+    --border: #4a1c37;
+    --border-strong: #5F0F40;
+    --border-soft: #341527;
+    --text-primary: #F9EAE1;
+    --text-secondary: #ecd3c9;
+    --text-tertiary: #d9b2a8;
+    --text-muted: #CC8B86;
+    --text-faint: #96635e;
+    --topbar-bg: rgba(26,10,19,0.65);
+    --topbar-border: rgba(196,23,59,0.16);
+    --panel-left-border: rgba(196,23,59,0.12);
+    --overlay-dim: rgba(10,4,8,0.65);
+    --overlay-strong: rgba(12,5,9,0.92);
+    --fitbtn-bg: rgba(41,16,31,0.85);
+    --page-glow-1: rgba(154,3,30,0.18);
+    --page-glow-2: rgba(95,15,64,0.28);
+    --page-glow-3: rgba(204,139,134,0.14);
 
     /* Tinted action-button surfaces (abort/resign, pause, new game) — these
        also flip between themes so the buttons don't stay dark-theme-colored
        when the pastel theme is active. */
-    --btn-danger-bg: #3d1c22;
+    --btn-danger-bg: #3d0d16;
     --btn-danger-text: var(--paper);
-    --btn-info-bg: #1c3d4a;
+    --btn-info-bg: #3a1230;
     --btn-info-text: var(--paper);
-    --btn-warn-bg: #3d3a1c;
+    --btn-warn-bg: #3d2620;
     --btn-warn-text: var(--paper);
-    --btn-warn-border: #ababab;
+    --btn-warn-border: #CC8B86;
   }
   html[data-theme="pastel"] {
     --sky: #8D89A6;
@@ -95,7 +95,7 @@
       radial-gradient(ellipse 120% 90% at 100% 100%, var(--page-glow-3), rgba(0,0,0,0) 55%),
       var(--bg-page);
     color: var(--text-primary);
-    font-family: 'Sora', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-family: 'DM Mono', monospace;
     transition: background-color 0.2s ease, color 0.2s ease;
   }
   body { display: flex; flex-direction: column; }
@@ -350,7 +350,7 @@
     width: 100%; padding: 11px; border-radius: 6px; font-size: 13.5px; font-weight: 700;
     cursor: pointer; letter-spacing: 0.3px; margin-top: 4px;
   }
-  .lobbyPrimaryBtn { background: var(--sky); color: #0a0f1c; border: 1px solid var(--sky); }
+  .lobbyPrimaryBtn { background: var(--sky); color: #1a0a13; border: 1px solid var(--sky); }
   .lobbyPrimaryBtn:hover { filter: brightness(1.1); }
   .lobbyPrimaryBtn:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
   .lobbySecondaryBtn { background: transparent; color: var(--text-tertiary); border: 1px solid var(--border-strong); margin-top: 10px; }
@@ -408,11 +408,38 @@
   #resignBtn.hidden { display: none; }
   #setupCard.hidden { display: none; }
   #newGameBtn.hidden { display: none; }
+
+  /* ── Global lichess-style type treatment: tracked uppercase caps ────── */
+  body, button, input, label {
+    letter-spacing: 0.4px;
+  }
+  #panel h2,
+  .themeSwitch, .themeSwitch *,
+  .row label, .lobbyBox .row label, .numRow, .lobbyBox .numRow,
+  .toggles, .toggles label,
+  .discTag, .kickBtn,
+  .circleTimerSub, .miniTimerSub,
+  .seatRow .who, .clocks-list .who,
+  .youAreLabel, .waitHint, .lobbyStatus,
+  .gameEndSub,
+  .roomBar, .elim,
+  .promotionChoiceBtn .label,
+  .boardClockLabel,
+  .setupSummary,
+  .status-box, .confirmMsg {
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  #panel h2, .lobbyPrimaryBtn, .lobbySecondaryBtn, .lobbyTabBtn,
+  .discTag, .kickBtn, .gameEndTitle,
+  .seatRow .name, .lobbyBox .brand, #topbar .brand {
+    letter-spacing: 1px;
+  }
 </style>
 </head>
 <body>
 <div id="topbar">
-  <div class="brand"><span class="mark">♞</span> Limaçon Chess</div>
+  <div class="brand"><span class="mark">♞</span> N-Player Zombie Chess</div>
   <div style="display:flex; align-items:center; gap:14px;">
     <div id="roomBar" class="roomBar hidden">
       <span>Room <span class="code" id="roomBarCode">-----</span></span>
@@ -524,7 +551,7 @@
 
 <div class="fullOverlay" id="lobbyOverlay">
   <div class="lobbyBox">
-    <div class="brand"><span class="mark">♞</span> Limaçon Chess</div>
+    <div class="brand"><span class="mark">♞</span> N-Player Zombie Chess</div>
     <div class="lobbyTabs">
       <button class="lobbyTabBtn active" id="lobbyTabCreateBtn" type="button">Create Room</button>
       <button class="lobbyTabBtn" id="lobbyTabJoinBtn" type="button">Join Room</button>
