@@ -495,7 +495,7 @@
       <h2>Display</h2>
       <div class="row">
         <label>Board luminosity <span class="val" id="lumVal">85</span></label>
-        <input type="range" id="lumSlider" min="15" max="98" step="1" value="85">
+        <input type="range" id="lumSlider" min="15" max="98" step="1" value="50">
       </div>
       <div style="font-size:11px; color:var(--text-faint); margin-top:-6px;">
         oklch bright L=<span id="lumBrightVal">85%</span> · dim L=<span id="lumDimVal">92%</span>
@@ -594,8 +594,8 @@ try {
 // tones stay visually distinct as you scrub the slider. Defaults match the
 // original hardcoded values (pastel 85/92, dark 45/45).
 const boardLum = {
-  pastel: { bright: 85, dim: 92 },
-  dark: { bright: 45, dim: 45 },
+  pastel: { bright: 75, dim: 82 },
+  dark: { bright: 50, dim: 50 },
 };
 try {
   const savedLum = JSON.parse(localStorage.getItem('limaconBoardLum') || 'null');
@@ -2035,7 +2035,11 @@ document.getElementById('backToRoomBtn').addEventListener('click', () => {
 // one family) so that every pair of adjacent slices — including the wrap
 // from the last slice back to the first — gets the same, maximal hue gap.
 function sliceColor(k, n, bright) {
-  const hue = Math.round((200 + (k / n) * 360) % 360);
+  // Hue sweeps twice around the wheel (720°) across the n slices instead of
+  // once, so adjacent slices land roughly opposite each other in hue rather
+  // than a few degrees apart — much easier to tell neighboring wedges apart
+  // at a glance.
+  const hue = Math.round((200 + (k / n) * 720) % 360);
   // OKLCH here for the same reason as playerColor: an even hue sweep at a
   // fixed OKLCH lightness keeps every wedge reading as the same tile
   // brightness, instead of some hues washing out or going muddy the way
@@ -2047,7 +2051,7 @@ function sliceColor(k, n, bright) {
   return bright ? `oklch(${L.bright}% 0.1 ${hue} / 0.55)` : `oklch(${L.dim}% 0.1 ${hue} / 0.14)`;
 }
 function sliceStroke(k, n) {
-  const hue = Math.round((200 + (k / n) * 360) % 360);
+  const hue = Math.round((200 + (k / n) * 720) % 360);
   return `oklch(62% 0.12 ${hue} / 0.5)`;
 }
 
