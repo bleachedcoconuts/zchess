@@ -594,14 +594,14 @@ try {
 // tones stay visually distinct as you scrub the slider. Defaults match the
 // original hardcoded values (pastel 85/92, dark 45/45).
 const boardLum = {
-  pastel: { bright: 75, dim: 82 },
-  dark: { bright: 50, dim: 50 },
+  pastel: { bright: 75, dim: 90 },
+  dark: { bright: 50, dim: 32 },
 };
 try {
   const savedLum = JSON.parse(localStorage.getItem('limaconBoardLum') || 'null');
   if (savedLum && savedLum.pastel && savedLum.dark) Object.assign(boardLum, savedLum);
 } catch (e) {}
-const DIM_GAP = { pastel: 7, dark: 0 };
+const DIM_GAP = { pastel: 15, dark: -18 };
 
 function applyTheme(t) {
   theme = t;
@@ -622,7 +622,7 @@ function syncLumSlider() {
 document.getElementById('lumSlider').addEventListener('input', (ev) => {
   const v = parseInt(ev.target.value, 10);
   boardLum[theme].bright = v;
-  boardLum[theme].dim = Math.min(98, v + DIM_GAP[theme]);
+  boardLum[theme].dim = Math.max(5, Math.min(98, v + DIM_GAP[theme]));
   document.getElementById('lumVal').textContent = v;
   document.getElementById('lumBrightVal').textContent = v + '%';
   document.getElementById('lumDimVal').textContent = boardLum[theme].dim + '%';
@@ -2046,9 +2046,9 @@ function sliceColor(k, n, bright) {
   // stack like that.
   const L = boardLum[theme];
   if (theme === 'pastel') {
-    return bright ? `oklch(${L.bright}% 0.09 ${hue})` : `oklch(${L.dim}% 0.05 ${hue})`;
+    return bright ? `oklch(${L.bright}% 0.1 ${hue})` : `oklch(${L.dim}% 0.035 ${hue})`;
   }
-  return bright ? `oklch(${L.bright}% 0.1 ${hue})` : `oklch(${L.dim}% 0.1 ${hue})`;
+  return bright ? `oklch(${L.bright}% 0.12 ${hue})` : `oklch(${L.dim}% 0.06 ${hue})`;
 }
 function sliceStroke(k, n) {
   const hue = Math.round((200 + (k / n) * 360) % 360);
